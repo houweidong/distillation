@@ -41,6 +41,7 @@ criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
 optimizer = optim.SGD(t_net.parameters(), lr=0.1, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
+optimizer = optim.adam
 if args.scheduler == 'step':
     optimizer = MultiStepLR(optimizer, milestones=[30, 60], gamma=0.05)
 elif args.scheduler == 'cos':
@@ -71,13 +72,11 @@ def train(net, epoch):
         optimizer.optimizer.zero_grad()
         loss.backward()
         optimizer.optimizer.step()
-        optimizer.step()
-
         train_loss += loss.item()
         b_idx = batch_idx
-
     # print('Train \t Time Taken: %.2f sec' % (time.time() - epoch_start_time))
         print('Loss: %.3f' % (train_loss / (b_idx + 1)))
+    optimizer.step()
 
 
 # Test
