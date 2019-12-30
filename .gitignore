@@ -1,12 +1,13 @@
-checkpoint/
-.idea/
-results/
-models/__pycache__
-*__pycache__
-paper/
-results_squad.zip
-module/
-seeds/WRN22*
-seeds/WRN16*
-seeds/
+# my
+log/*
+
+# Compilation related
+**/__pycache__
 *.pyc
+*.c
+*.o
+*.so
+
+# IDE files
+.idea
+venv
