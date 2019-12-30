@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import math
-
+from training.loss_utils import multitask_loss
 
 ##########################
 # For CIFAR
@@ -247,7 +247,8 @@ class AB_distill_Resnet2mobilenet(nn.Module):
         C4 = [nn.Conv2d(1024, 2048, kernel_size=1, stride=1, padding=0, bias=False),
               nn.BatchNorm2d(2048)]
 
-        for m in C1 + C2 + C3 + C4:
+        # for m in C1 + C2 + C3 + C4:
+        for m in C1 + C3 + C4:
             if isinstance(m, nn.Conv2d):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
@@ -262,6 +263,7 @@ class AB_distill_Resnet2mobilenet(nn.Module):
 
         self.Connectfc = nn.Linear(1024, 1000)
         self.Connectors = nn.ModuleList([self.Connect1, self.Connect2, self.Connect3, self.Connect4, self.Connectfc])
+        self.Connectors = nn.ModuleList([self.Connect1, self.Connect3, self.Connect4, self.Connectfc])
 
         self.t_net = t_net
         self.s_net = s_net
@@ -344,3 +346,155 @@ class AB_distill_Resnet2mobilenet(nn.Module):
         # Return all losses
         return torch.cat([loss, loss_CE, loss_DTL, loss_AT4, loss_AT3, loss_AT2, loss_AT1, correct], dim=1)
 
+##########################
+# large Mobilenetv3 to small Mobilenetv3
+# For transfer learning
+###########################
+
+# Designed for data parallel
+class AB_distill_Mobilenetl2Mobilenets(nn.Module):
+
+    # Proposed alternative loss function
+    def criterion_active_L2(self, source, target, margin):
+        loss = ((source + margin) ** 2 * ((source > -margin) & (target <= 0)).float() +
+                (source - margin) ** 2 * ((source <= margin) & (target > 0)).float())
+        return torch.abs(loss).sum()
+
+    def __init__(self, t_net, s_net, batch_size, DTL, loss_multiplier, channel_s):
+        super(AB_distill_Mobilenetl2Mobilenets, self).__init__()
+
+        self.channel_t = [64, 72, 240, 672]
+        self.channel_s = channel_s
+        self.batch_size = batch_size
+        self.loss_multiplier = loss_multiplier
+        self.DTL = DTL
+        self.expansion = 6
+
+        # Connector layers
+        C1 = [nn.Conv2d(self.channel_s[0], self.channel_t[0], kernel_size=1, stride=1, padding=0, bias=False),
+              nn.BatchNorm2d(self.channel_t[0])] if self.channel_t[0] != self.channel_s[0] else []
+        C2 = [nn.Conv2d(self.channel_s[1], self.channel_t[1], kernel_size=1, stride=1, padding=0, bias=False),
+              nn.BatchNorm2d(self.channel_t[1])] if self.channel_t[1] != self.channel_s[1] else []
+        C3 = [nn.Conv2d(self.channel_s[2], self.channel_t[2], kernel_size=1, stride=1, padding=0, bias=False),
+              nn.BatchNorm2d(self.channel_t[2])] if self.channel_t[2] != self.channel_s[2] else []
+        C4 = [nn.Conv2d(self.channel_s[3], self.channel_t[3], kernel_size=1, stride=1, padding=0, bias=False),
+              nn.BatchNorm2d(self.channel_t[3])] if self.channel_t[3] != self.channel_s[3] else []
+
+        for m in C1 + C2 + C3 + C4:
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+        self.Connect1 = nn.Sequential(*C1)
+        self.Connect2 = nn.Sequential(*C2)
+        self.Connect3 = nn.Sequential(*C3)
+        self.Connect4 = nn.Sequential(*C4)
+
+        # self.Connectfc = nn.Linear(1280, 1000)
+        # self.Connectors = nn.ModuleList([self.Connect1, self.Connect2, self.Connect3, self.Connect4, self.Connectfc])
+        self.Connectors = nn.ModuleList([self.Connect1, self.Connect2, self.Connect3, self.Connect4])
+
+        self.t_net = t_net
+        self.s_net = s_net
+
+        self.stage1 = True
+        # self.criterion_CE = nn.CrossEntropyLoss()
+        self.criterion_CE = nn.functional.binary_cross_entropy_with_logits
+
+    def forward(self, inputs, targets):
+
+        # Teacher network
+
+        res1_t = self.t_net.features[0:2](inputs)
+        res2_t = self.t_net.features[2:4](res1_t)
+        res3_t = self.t_net.features[4:7](res2_t)
+        res4_t = self.t_net.features[7:14](res3_t)
+
+        out = self.t_net.avgpool(self.t_net.conv(self.t_net.features[14:](res4_t)))
+        out_ft = []
+        for i in range(self.t_net.num_attr):
+            out_ti = getattr(self.t_net, 'classifier' + str(i))[0:1](out)
+            out_ft.append(out_ti)
+
+        # Student network
+        res1_s = self.s_net.features[0:2](inputs)
+        res2_s = self.s_net.features[2:4](res1_s)
+        res3_s = self.s_net.features[4:6](res2_s)
+        res4_s = self.s_net.features[6:9](res3_s)
+
+        out = self.s_net.avgpool(self.s_net.conv(self.s_net.features[9:](res4_s)))
+        out_fs = []
+        for i in range(self.s_net.num_attr):
+            out_si = getattr(self.s_net, 'classifier' + str(i))[0:1](out)
+            out_fs.append(out_si)
+        out_s = []
+        for i in range(self.s_net.num_attr):
+            out_si = getattr(self.s_net, 'classifier' + str(i))(out)
+            out_s.append(out_si)
+        # out = out.view(-1, 1280)
+        # out_imagenet = self.Connectfc(out)
+        # out_s = self.s_net.classifier(out)
+
+        # Features before ReLU
+        res1_s = self.s_net.features[2].conv[0:2](res1_s)
+        res2_s = self.s_net.features[3].conv[0:2](res2_s)
+        res3_s = self.s_net.features[6].conv[0:2](res3_s)
+        res4_s = self.s_net.features[9][0:2](res4_s)
+
+
+        # Activation transfer loss
+        loss_AT4 = ((self.Connect4(res4_s) > 0) ^ (res4_t > 0)).sum().float() / res4_t.nelement()
+        loss_AT3 = ((self.Connect3(res3_s) > 0) ^ (res3_t > 0)).sum().float() / res3_t.nelement()
+        loss_AT2 = ((self.Connect2(res2_s) > 0) ^ (res2_t > 0)).sum().float() / res2_t.nelement()
+        loss_AT1 = ((self.Connect1(res1_s) > 0) ^ (res1_t > 0)).sum().float() / res1_t.nelement()
+
+        loss_AT4 = loss_AT4.unsqueeze(0).unsqueeze(1)
+        loss_AT3 = loss_AT3.unsqueeze(0).unsqueeze(1)
+        loss_AT2 = loss_AT2.unsqueeze(0).unsqueeze(1)
+        loss_AT1 = loss_AT1.unsqueeze(0).unsqueeze(1)
+
+        # Alternative loss
+        if self.stage1 is True:
+            margin = 1.0
+            loss = self.criterion_active_L2(self.Connect4(res4_s), res4_t.detach(), margin) / self.batch_size
+            loss += self.criterion_active_L2(self.Connect3(res3_s), res3_t.detach(), margin) / self.batch_size / (self.channel_t[-2]*4/self.channel_t[-1])
+            loss += self.criterion_active_L2(self.Connect2(res2_s), res2_t.detach(), margin) / self.batch_size / (self.channel_t[-3]*16/self.channel_t[-1])
+            loss += self.criterion_active_L2(self.Connect1(res1_s), res1_t.detach(), margin) / self.batch_size / (self.channel_t[-4]*64/self.channel_t[-1])
+
+            loss /= 1000
+
+            loss = loss.unsqueeze(0).unsqueeze(1)
+        else:
+            loss = torch.zeros(1, 1).cuda()
+
+        loss *= self.loss_multiplier
+
+        # Cross-entropy loss
+        loss_CE = multitask_loss(out_s, targets, self.criterion_CE)
+        loss_CE.unsqueeze(0).unsqueeze(1)
+
+        # DTL (Distillation in Transfer Learning) loss
+        if self.DTL is True:
+            loss_DTL = torch.zeros(size=()).cuda()
+            for i in range(self.t_net.num_attr):
+                out_ti, out_si = out_ft[i], out_fs[i]
+                loss_DTL = torch.mean(torch.pow((out_ti - torch.mean(out_ti, 1, keepdim=True)).detach()
+                                                - (out_si - torch.mean(out_si, 1, keepdim=True)), 2)) * 10
+
+            loss_DTL = loss_DTL.unsqueeze(0).unsqueeze(1)
+        else:
+            loss_DTL = torch.zeros(1,1).cuda()
+
+        # Training accuracy
+        # _, predicted = torch.max(out_s.data, 1)
+        # correct = predicted.eq(targets.data).sum().float().unsqueeze(0).unsqueeze(1)
+
+        # Return all losses
+        # if self.training:
+        return torch.cat([loss, loss_CE, loss_DTL, loss_AT1, loss_AT2, loss_AT3, loss_AT4], dim=1)
+        # # Return probs
+        # else:
+        #     return out_s
