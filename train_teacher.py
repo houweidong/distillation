@@ -24,7 +24,67 @@ from training.get_loss_metric import get_losses_metrics
 from utils.table import print_summar_table
 from utils.logger import Logger
 from utils.opts import parse_opts
-dataset_name = 'new'
+
+
+# Training
+def train(net, epoch):
+    # epoch_start_time = time.time()
+    print('\nClassification training Epoch: %d' % epoch)
+    net.train()
+    # train_loss = 0
+    global optimizer
+    bt_sum = len(trainloader)
+    print('lr: %.4f' % optimizer.optimizer.param_groups[0]['lr'])
+    for batch_idx, bt in enumerate(trainloader):
+        inputs, targets = _prepare_batch(bt, device=device) if device == 'cuda' else bt
+        outputs = net(inputs)
+        loss = multitask_loss(outputs, targets, criterion_CE)
+
+        optimizer.optimizer.zero_grad()
+        loss.backward()
+        optimizer.optimizer.step()
+        # train_loss += loss.item()
+        # print('Train \t Time Taken: %.2f sec' % (time.time() - epoch_start_time))
+        if batch_idx % 20 == 0:
+            print('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
+
+
+# Test
+def test(net, epoch):
+    net.eval()
+    data_list = [trainloader, testloader]
+    # name_list = ['train', 'val']
+    name_list = ['val']
+    eval_list = [train_evaluator, val_evaluator]
+
+    for data, name, evl in zip(data_list, name_list, eval_list):
+        evl.run(data)
+        metrics_info = evl.state.metrics["multitask"]
+        # logger(name + ": Validation Results - Epoch: {}".format(epoch))
+        # print_summar_table(logger, attr_name, metrics_info['logger'])
+    if args.scheduler == 'pleau':
+        optimizer.step(metrics_info['logger']['attr']['ap'][-1])
+    else:
+        optimizer.step()
+    return metrics_info
+
+
+class Saver():
+    def __init__(self):
+        self.max_ap = 0.0
+        self.save_root = args.log_dir
+
+    def save(self, epoch, metrics_info):
+        ap = metrics_info['logger']['attr']['ap'][-1]
+        if epoch > 15 and ap > self.max_ap:
+            self.max_ap = ap
+            save_file_path = os.path.join(self.save_root, 'ap{}'.format(ap))
+            torch.save(t_net.module.state_dict(), save_file_path)
+
+            logger(": Validation Results - Epoch: {}".format(epoch))
+            print_summar_table(logger, attr_name, metrics_info['logger'])
+            logger('AP:%0.3f' % metrics_info['logger']['attr']['ap'][-1])
+
 
 parser = argparse.ArgumentParser(description='PyTorch my data Training')
 args = parse_opts()
@@ -33,19 +93,20 @@ logger = log.logger.info
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # model, dataloader, opmiter, use ignite's evaluator
-t_net = mobile3l(frm='official')
-t_net = torch.nn.DataParallel(t_net).cuda()
+t_net = mobile3l(frm='official', )
+if device == 'cuda':
+    t_net = torch.nn.DataParallel(t_net).cuda()
 
 attr, attr_name = get_tasks(args)
 criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-optimizer = optim.SGD(t_net.parameters(), lr=0.1, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
-optimizer = optim.adam
+optimizer = optim.SGD(t_net.parameters(), lr=args.lr, nesterov=args.nesterov, momentum=args.momentum, weight_decay=args.weight_decay)
+# optimizer = optim.adam
 if args.scheduler == 'step':
-    optimizer = MultiStepLR(optimizer, milestones=[30, 60], gamma=0.05)
+    optimizer = MultiStepLR(optimizer, milestones=[15, 25], gamma=0.1)
 elif args.scheduler == 'cos':
-    optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-5)
+    optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-3)
 elif args.scheduler == 'pleau':
     optimizer = ReduceLROnPlateau(optimizer)
 else:
@@ -56,48 +117,11 @@ train_evaluator = create_supervised_evaluator(t_net, metrics={
 val_evaluator = create_supervised_evaluator(t_net, metrics={
     'multitask': MultiAttributeMetric(metrics, attr_name)}, device=device)
 
-
-# Training
-def train(net, epoch):
-    # epoch_start_time = time.time()
-    print('\nClassification training Epoch: %d' % epoch)
-    net.train()
-    train_loss = 0
-    global optimizer
-    for batch_idx, bt in enumerate(trainloader):
-        inputs, targets = _prepare_batch(bt, device=device) if device=='cuda' else bt
-        outputs = net(inputs)
-        loss = multitask_loss(outputs, targets, criterion_CE)
-
-        optimizer.optimizer.zero_grad()
-        loss.backward()
-        optimizer.optimizer.step()
-        train_loss += loss.item()
-        b_idx = batch_idx
-    # print('Train \t Time Taken: %.2f sec' % (time.time() - epoch_start_time))
-        print('Loss: %.3f' % (train_loss / (b_idx + 1)))
-    optimizer.step()
-
-
-# Test
-def test(net, epoch):
-    net.eval()
-    data_list = [trainloader, testloader]
-    name_list = ['train', 'val']
-    eval_list = [train_evaluator, val_evaluator]
-
-    for data, name, evl in zip(data_list, name_list, eval_list):
-        evl.run(data)
-        metrics_info = evl.state.metrics["multitask"]
-        logger(name + ": Validation Results - Epoch: {}".format(epoch))
-        print_summar_table(logger, attr_name, metrics_info['logger'])
+Saver = Saver()
 
 
 # Distillation (Initialization)
 for epoch in range(1, args.n_epochs+1):
     train(t_net, epoch)
-    if epoch % 5 is 0:
-        test(t_net, epoch)
-    if epoch % 30 is 0:
-        save_file_path = os.path.join(args.log_dir, 'save_{}.pth'.format(epoch))
-        torch.save(t_net.module.state_dict(), save_file_path)
+    metric_info = test(t_net, epoch)
+    Saver.save(epoch, metric_info)

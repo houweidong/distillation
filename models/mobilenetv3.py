@@ -8,10 +8,10 @@ arXiv preprint arXiv:1905.02244.
 import torch.nn as nn
 import math
 import torch
-
+import os
 
 __all__ = ['mobile3l', 'mobile3s', 'mobile3ss']
-
+root = os.environ['HOME']
 
 def _make_divisible(v, divisor, min_value=None):
     """
@@ -196,7 +196,7 @@ class MobileNetV3(nn.Module):
                 m.bias.data.zero_()
 
 
-def mobile3l(pretrained=True, frm='official'):
+def mobile3l(pretrained=True, frm='official', device='cuda'):
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -219,18 +219,18 @@ def mobile3l(pretrained=True, frm='official'):
 
     if pretrained:
         if frm == 'official':
-            path = '/root/.torch/models/mobilenetv3-large-657e7b3d.pth'
-            state_dict = torch.load(path)
+            path = os.path.join(root, '.torch/models/mobilenetv3-large-657e7b3d.pth')
+            state_dict = torch.load(path, map_location=device)
             model.load_state_dict(state_dict, strict=False)
         else:
-            path = '/root/.torch/models/mobilenetv3-mydata.pth'
-            state_dict = torch.load(path)
+            path = os.path.join(root, '.torch/models/mobilenetv3-mydata.pth')
+            state_dict = torch.load(path, map_location=device)
             model.load_state_dict(state_dict, strict=True)
 
     return model
 
 
-def mobile3s(pretrained=True):
+def mobile3s(pretrained=True, device='cuda'):
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
@@ -249,14 +249,14 @@ def mobile3s(pretrained=True):
     model = MobileNetV3(cfgs, mode='small')
 
     if pretrained:
-        path = '/root/.torch/models/mobilenetv3-small-c7eb32fe.pth'
-        state_dict = torch.load(path)
+        path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
+        state_dict = torch.load(path, map_location=device)
         model.load_state_dict(state_dict, strict=True)
 
     return model
 
 
-def mobile3ss(pretrained=False):
+def mobile3ss(pretrained=False, device='cuda'):
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -274,8 +274,15 @@ def mobile3ss(pretrained=False):
     model = MobileNetV3(cfgs, mode='small')
 
     if pretrained:
-        path = '/root/.torch/models/mobilenetv3-small-c7eb32fe.pth'
-        state_dict = torch.load(path)
+        path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
+        state_dict = torch.load(path, map_location=device)
         model.load_state_dict(state_dict, strict=True)
 
     return model
+
+
+def get_model(conv, **args):
+    model = {'mobile3l': mobile3l, 'mobile3s': mobile3s, 'mobile3ss': mobile3ss}
+    if conv not in model:
+        raise Exception('not implemented model')
+    return model[conv](args)

@@ -13,3 +13,8 @@ a = torch.BoolTensor()
 # r = f.linear(x, w)
 # print(r)
 # print(r.shape)
+
+
+ap = 0.005
+a = 'ap{}'.format(ap)
+print(a)
