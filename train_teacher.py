@@ -52,10 +52,12 @@ def train(net, epoch):
 # Test
 def test(net, epoch):
     net.eval()
-    data_list = [trainloader, testloader]
+    # data_list = [trainloader, testloader]
     # name_list = ['train', 'val']
+    # eval_list = [train_evaluator, val_evaluator]
+    data_list = [testloader]
     name_list = ['val']
-    eval_list = [train_evaluator, val_evaluator]
+    eval_list = [val_evaluator]
 
     for data, name, evl in zip(data_list, name_list, eval_list):
         evl.run(data)
@@ -76,7 +78,7 @@ class Saver():
 
     def save(self, epoch, metrics_info):
         ap = metrics_info['logger']['attr']['ap'][-1]
-        if epoch > 15 and ap > self.max_ap:
+        if ap > self.max_ap:
             self.max_ap = ap
             save_file_path = os.path.join(self.save_root, 'ap{}'.format(ap))
             torch.save(t_net.module.state_dict(), save_file_path)
