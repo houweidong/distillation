@@ -71,7 +71,7 @@ def test(net, epoch):
     return metrics_info
 
 
-class Saver():
+class Saver(object):
     def __init__(self):
         self.max_ap = 0.0
         self.save_root = args.log_dir
@@ -90,12 +90,12 @@ class Saver():
 
 parser = argparse.ArgumentParser(description='PyTorch my data Training')
 args = parse_opts()
-log = Logger(filename=os.path.join(args.log_dir, args.log_file), level='debug')
+log = Logger(filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='screen')
 logger = log.logger.info
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # model, dataloader, opmiter, use ignite's evaluator
-t_net = mobile3l(frm='official', )
+t_net = get_model(args.conv, frm='official', name_t=args.name_t)
 if device == 'cuda':
     t_net = torch.nn.DataParallel(t_net).cuda()
 
@@ -122,7 +122,6 @@ val_evaluator = create_supervised_evaluator(t_net, metrics={
 Saver = Saver()
 
 
-# Distillation (Initialization)
 for epoch in range(1, args.n_epochs+1):
     train(t_net, epoch)
     metric_info = test(t_net, epoch)

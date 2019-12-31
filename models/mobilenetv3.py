@@ -10,8 +10,9 @@ import math
 import torch
 import os
 
-__all__ = ['mobile3l', 'mobile3s', 'mobile3ss']
+__all__ = ['get_model']
 root = os.environ['HOME']
+
 
 def _make_divisible(v, divisor, min_value=None):
     """
@@ -196,7 +197,22 @@ class MobileNetV3(nn.Module):
                 m.bias.data.zero_()
 
 
-def mobile3l(pretrained=True, frm='official', device='cuda'):
+def get_channels_for_distill(cfgs):
+
+    channels = []
+    layers = []
+    for i, cfg in enumerate(cfgs):
+        if cfg[-1] == 2:
+            channels.append(cfg[1])
+            layers.append(i+1)
+    return channels, layers
+
+
+def mobile3l(**kwargs):
+    frm = kwargs['frm'] if 'frm' in kwargs else 'my'
+    device = kwargs['device'] if 'device' in kwargs else 'cuda'
+    pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
+    name_t = kwargs['name_t'] if 'name_t' in kwargs else None
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -218,19 +234,17 @@ def mobile3l(pretrained=True, frm='official', device='cuda'):
     model = MobileNetV3(cfgs, mode='large')
 
     if pretrained:
-        if frm == 'official':
-            path = os.path.join(root, '.torch/models/mobilenetv3-large-657e7b3d.pth')
-            state_dict = torch.load(path, map_location=device)
-            model.load_state_dict(state_dict, strict=False)
-        else:
-            path = os.path.join(root, '.torch/models/mobilenetv3-mydata.pth')
-            state_dict = torch.load(path, map_location=device)
-            model.load_state_dict(state_dict, strict=True)
-
-    return model
+        path = os.path.join(root, '.torch/models/', name_t)
+        state_dict = torch.load(path, map_location=device)
+        strict = False if frm == 'official' else True
+        model.load_state_dict(state_dict, strict=strict)
+    channels, layers = get_channels_for_distill(cfgs)
+    return model, channels, layers
 
 
-def mobile3s(pretrained=True, device='cuda'):
+def mobile3s(**kwargs):
+    device = kwargs['device'] if 'device' in kwargs else 'cuda'
+    pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
@@ -251,12 +265,14 @@ def mobile3s(pretrained=True, device='cuda'):
     if pretrained:
         path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
         state_dict = torch.load(path, map_location=device)
-        model.load_state_dict(state_dict, strict=True)
+        model.load_state_dict(state_dict, strict=False)
+    channels, layers = get_channels_for_distill(cfgs)
+    return model, channels, layers
 
-    return model
 
-
-def mobile3ss(pretrained=False, device='cuda'):
+def mobile3ss(**kwargs):
+    # device = kwargs['device'] if 'device' in kwargs else 'cuda'
+    # pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -273,16 +289,17 @@ def mobile3ss(pretrained=False, device='cuda'):
     ]
     model = MobileNetV3(cfgs, mode='small')
 
-    if pretrained:
-        path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
-        state_dict = torch.load(path, map_location=device)
-        model.load_state_dict(state_dict, strict=True)
+    # if pretrained:
+    #     path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
+    #     state_dict = torch.load(path, map_location=device)
+    #     model.load_state_dict(state_dict, strict=True)
 
-    return model
+    channels, layers = get_channels_for_distill(cfgs)
+    return model, channels, layers
 
 
-def get_model(conv, **args):
+def get_model(conv, **kwargs):
     model = {'mobile3l': mobile3l, 'mobile3s': mobile3s, 'mobile3ss': mobile3ss}
     if conv not in model:
         raise Exception('not implemented model')
-    return model[conv](args)
+    return model[conv](**kwargs)

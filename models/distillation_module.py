@@ -360,11 +360,13 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
                 (source - margin) ** 2 * ((source <= margin) & (target > 0)).float())
         return torch.abs(loss).sum()
 
-    def __init__(self, t_net, s_net, batch_size, DTL, loss_multiplier, channel_s):
+    def __init__(self, t_net, s_net, batch_size, DTL, loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE):
         super(AB_distill_Mobilenetl2Mobilenets, self).__init__()
 
-        self.channel_t = [64, 72, 240, 672]
+        self.channel_t = channel_t
         self.channel_s = channel_s
+        self.layer_t = layer_t
+        self.layer_s = layer_s
         self.batch_size = batch_size
         self.loss_multiplier = loss_multiplier
         self.DTL = DTL
@@ -402,30 +404,30 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
 
         self.stage1 = True
         # self.criterion_CE = nn.CrossEntropyLoss()
-        self.criterion_CE = nn.functional.binary_cross_entropy_with_logits
+        self.criterion_CE = criterion_CE
 
     def forward(self, inputs, targets):
 
         # Teacher network
 
-        res1_t = self.t_net.features[0:2](inputs)
-        res2_t = self.t_net.features[2:4](res1_t)
-        res3_t = self.t_net.features[4:7](res2_t)
-        res4_t = self.t_net.features[7:14](res3_t)
+        res1_t = self.t_net.features[0:self.layer_t[0]](inputs)
+        res2_t = self.t_net.features[self.layer_t[0]:self.layer_t[1]](res1_t)
+        res3_t = self.t_net.features[self.layer_t[1]:self.layer_t[2]](res2_t)
+        res4_t = self.t_net.features[self.layer_t[2]:self.layer_t[3]](res3_t)
 
-        out = self.t_net.avgpool(self.t_net.conv(self.t_net.features[14:](res4_t)))
+        out = self.t_net.avgpool(self.t_net.conv(self.t_net.features[self.layer_t[3]:](res4_t))).view(inputs.size(0), -1)
         out_ft = []
         for i in range(self.t_net.num_attr):
             out_ti = getattr(self.t_net, 'classifier' + str(i))[0:1](out)
             out_ft.append(out_ti)
 
         # Student network
-        res1_s = self.s_net.features[0:2](inputs)
-        res2_s = self.s_net.features[2:4](res1_s)
-        res3_s = self.s_net.features[4:6](res2_s)
-        res4_s = self.s_net.features[6:9](res3_s)
+        res1_s = self.s_net.features[0:self.layer_s[0]](inputs)
+        res2_s = self.s_net.features[self.layer_s[0]:self.layer_s[1]](res1_s)
+        res3_s = self.s_net.features[self.layer_s[1]:self.layer_s[2]](res2_s)
+        res4_s = self.s_net.features[self.layer_s[2]:self.layer_s[3]](res3_s)
 
-        out = self.s_net.avgpool(self.s_net.conv(self.s_net.features[9:](res4_s)))
+        out = self.s_net.avgpool(self.s_net.conv(self.s_net.features[self.layer_s[3]:](res4_s))).view(inputs.size(0), -1)
         out_fs = []
         for i in range(self.s_net.num_attr):
             out_si = getattr(self.s_net, 'classifier' + str(i))[0:1](out)
@@ -434,16 +436,21 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
         for i in range(self.s_net.num_attr):
             out_si = getattr(self.s_net, 'classifier' + str(i))(out)
             out_s.append(out_si)
+        out_s = torch.cat(out_s, dim=1)
         # out = out.view(-1, 1280)
         # out_imagenet = self.Connectfc(out)
         # out_s = self.s_net.classifier(out)
 
         # Features before ReLU
-        res1_s = self.s_net.features[2].conv[0:2](res1_s)
-        res2_s = self.s_net.features[3].conv[0:2](res2_s)
-        res3_s = self.s_net.features[6].conv[0:2](res3_s)
-        res4_s = self.s_net.features[9][0:2](res4_s)
+        res1_t = self.t_net.features[self.layer_t[0]].conv[0:2](res1_t)
+        res2_t = self.t_net.features[self.layer_t[1]].conv[0:2](res2_t)
+        res3_t = self.t_net.features[self.layer_t[2]].conv[0:2](res3_t)
+        res4_t = self.t_net.features[self.layer_t[3]].conv[0:2](res4_t)
 
+        # res1_s = self.s_net.features[self.layer_s[0]].conv[0:2](res1_s)
+        res2_s = self.s_net.features[self.layer_s[1]].conv[0:2](res2_s)
+        res3_s = self.s_net.features[self.layer_s[2]].conv[0:2](res3_s)
+        res4_s = self.s_net.features[self.layer_s[3]].conv[0:2](res4_s)
 
         # Activation transfer loss
         loss_AT4 = ((self.Connect4(res4_s) > 0) ^ (res4_t > 0)).sum().float() / res4_t.nelement()
@@ -474,7 +481,7 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
 
         # Cross-entropy loss
         loss_CE = multitask_loss(out_s, targets, self.criterion_CE)
-        loss_CE.unsqueeze(0).unsqueeze(1)
+        loss_CE = loss_CE.unsqueeze(0).unsqueeze(1)
 
         # DTL (Distillation in Transfer Learning) loss
         if self.DTL is True:
@@ -486,7 +493,7 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
 
             loss_DTL = loss_DTL.unsqueeze(0).unsqueeze(1)
         else:
-            loss_DTL = torch.zeros(1,1).cuda()
+            loss_DTL = torch.zeros(1, 1).cuda()
 
         # Training accuracy
         # _, predicted = torch.max(out_s.data, 1)

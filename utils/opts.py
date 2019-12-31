@@ -152,6 +152,11 @@ def parse_opts():
         type=str,
         help=pretrainedmodels.model_names)
     parser.add_argument(
+        '--conv_s',
+        default='mobile3s',
+        choices=['mobile3ss', 'mobile3s'],
+        type=str)
+    parser.add_argument(
         '-cl',
         '--categorical_loss',
         default='ohem',
@@ -272,10 +277,10 @@ def parse_opts():
         help='pic: a single picture,  train_dir: the train set and val set,  camera: for the real time test')
     parser.add_argument('--loss_multiplier', default=1, type=float, help='multiplier to loss')
     parser.add_argument('--DTL', default=True, type=int, help='DTL (Distillation in Transfer Learning) method')
-    parser.add_argument('--distill_epoch', default=60, type=int, help='epoch for distillation')
+    parser.add_argument('--distill_epoch', default=5, type=int, help='epoch for distillation')
     parser.add_argument('--max_epoch', default=100, type=int, help='epoch for all')
-    # parser.add_argument('--network', default='mobilenet', type=str, help='network architecture')
-    # parser.add_argument('--teacher', default='resnet50', type=str, help='network architecture')
+    parser.add_argument('--name_t', default='mobilenetv3-large-657e7b3d.pth', type=str, help='teacher pretrained net')
+    parser.add_argument('--name_s', default='mobilenetv3-small-c7eb32fe.pth', type=str, help='student pretrained net')
 
     args = parser.parse_args()
     if args.log_dir:
