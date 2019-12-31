@@ -279,7 +279,7 @@ def parse_opts():
     parser.add_argument('--DTL', default=True, type=int, help='DTL (Distillation in Transfer Learning) method')
     parser.add_argument('--distill_epoch', default=5, type=int, help='epoch for distillation')
     parser.add_argument('--max_epoch', default=100, type=int, help='epoch for all')
-    parser.add_argument('--name_t', default='mobilenetv3-large-657e7b3d.pth', type=str, help='teacher pretrained net')
+    parser.add_argument('--name_t', default='ap0.8972', type=str, help='teacher pretrained net')
     parser.add_argument('--name_s', default='mobilenetv3-small-c7eb32fe.pth', type=str, help='student pretrained net')
 
     args = parser.parse_args()

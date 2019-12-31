@@ -28,7 +28,7 @@ from utils.opts import parse_opts
 
 # Distillation
 def Distillation(distill_net, epoch, withCE=False):
-    print('\nDistillation Epoch: %d' % epoch)
+    print('\nDistillation Epoch: %d  LR: %.4f' % (epoch, optimizer.param_groups[0]['lr']))
 
     distill_net.train()
     distill_net.module.s_net.train()
@@ -36,12 +36,11 @@ def Distillation(distill_net, epoch, withCE=False):
 
     train_loss, train_loss1, train_loss2, train_loss3, train_loss4 = 0, 0, 0, 0, 0
 
-    global optimizer
     for batch_idx, bt in enumerate(trainloader):
         inputs, targets = _prepare_batch(bt, device=device) if device == 'cuda' else bt
         distill_net.module.batch_size = inputs.shape[0]
         outputs = distill_net(inputs, targets)
-
+        bt_sum = len(trainloader)
         loss = outputs[:, 0].sum()
 
         if args.DTL is True:
@@ -62,19 +61,18 @@ def Distillation(distill_net, epoch, withCE=False):
         train_loss4 += loss_AT4.item()
 
         if batch_idx % 20 == 0:
-            print('similarity1 %.1f%%  similarity2 %.1f%%  similarity3 %.1f%%  similarity4 %.1f%%  '
+            print('similarity1: %.1f  similarity2: %.1f  similarity3: %.1f  similarity4: %.1f[%d/%d]'
                   % (100 * (1 - train_loss1 / (batch_idx+1)), (100 * (1 - train_loss2 / (batch_idx+1))),
-                     (100 * (1 - train_loss3 / (batch_idx+1))), (100 * (1 - train_loss4 / (batch_idx+1)))))
+                     (100 * (1 - train_loss3 / (batch_idx+1))), (100 * (1 - train_loss4 / (batch_idx+1))), batch_idx, bt_sum))
 
 
 # Training with DTL(Distillation in Transfer Learning) loss
 def train_DTL(distill_net, epoch):
-    print('\nClassification training Epoch: %d' % epoch)
+    print('\nClassification training Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
     distill_net.train()
     distill_net.module.s_net.train()
     distill_net.module.t_net.eval()
-    train_loss = 0
-    global optimizer
+    bt_sum = len(trainloader)
     for batch_idx, bt in enumerate(trainloader):
         inputs, targets = _prepare_batch(bt, device=device) if device == 'cuda' else bt
         distill_net.module.batch_size = inputs.shape[0]
@@ -90,20 +88,16 @@ def train_DTL(distill_net, epoch):
         loss.backward()
         optimizer.optimizer.step()
 
-        train_loss += loss.item()
-
-        b_idx = batch_idx
-        if b_idx % 20 == 0:
-            print('Loss: %.3f' % (train_loss / (b_idx + 1)))
+        if batch_idx % 20 == 0:
+            print('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
 
 
 # Training
 def train(net, epoch):
     # epoch_start_time = time.time()
-    print('\nClassification training Epoch: %d' % epoch)
+    print('\nClassification training Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
     net.train()
-    train_loss = 0
-    global optimizer
+    bt_sum = len(trainloader)
     for batch_idx, bt in enumerate(trainloader):
         inputs, targets = _prepare_batch(bt, device=device) if device == 'cuda' else bt
         net.module.batch_size = inputs.shape[0]
@@ -114,11 +108,8 @@ def train(net, epoch):
         loss.backward()
         optimizer.optimizer.step()
 
-        train_loss += loss.item()
-        b_idx = batch_idx
-
-        if b_idx % 20 == 0:
-            print('Loss: %.3f' % (train_loss / (b_idx + 1)))
+        if batch_idx % 20 == 0:
+            print('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
 
 
 # Test

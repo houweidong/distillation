@@ -32,7 +32,6 @@ def train(net, epoch):
     print('\nClassification training Epoch: %d' % epoch)
     net.train()
     # train_loss = 0
-    global optimizer
     bt_sum = len(trainloader)
     print('lr: %.4f' % optimizer.optimizer.param_groups[0]['lr'])
     for batch_idx, bt in enumerate(trainloader):
