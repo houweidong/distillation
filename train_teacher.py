@@ -24,7 +24,7 @@ from training.get_loss_metric import get_losses_metrics
 from utils.table import print_summar_table
 from utils.logger import Logger
 from utils.opts import parse_opts
-
+from utils.log_config import log_config
 
 # Training
 def train(net, epoch):
@@ -70,6 +70,25 @@ def test(net, epoch):
     return metrics_info
 
 
+def test(net, epoch):
+    net.eval()
+    data_list = [trainloader, testloader]
+    name_list = ['train', 'val']
+    eval_list = [train_evaluator, val_evaluator]
+
+    for data, name, evl in zip(data_list, name_list, eval_list):
+        evl.run(data)
+        metrics_info = evl.state.metrics["multitask"]
+        logger(name + ": Validation Results - Epoch: {}".format(epoch))
+        print_summar_table(logger, attr_name, metrics_info['logger'])
+
+    if args.scheduler == 'pleau':
+        optimizer.step(metrics_info['logger']['attr']['ap'][-1])
+    else:
+        optimizer.step()
+    return metrics_info
+
+
 class Saver(object):
     def __init__(self):
         self.max_ap = 0.0
@@ -82,19 +101,23 @@ class Saver(object):
             save_file_path = os.path.join(self.save_root, 'ap{}'.format(ap))
             torch.save(t_net.module.state_dict(), save_file_path)
 
-            logger(": Validation Results - Epoch: {}".format(epoch))
-            print_summar_table(logger, attr_name, metrics_info['logger'])
-            logger('AP:%0.3f' % metrics_info['logger']['attr']['ap'][-1])
+            logger_file(": Validation Results - Epoch: {}".format(epoch))
+            print_summar_table(logger_file, attr_name, metrics_info['logger'])
+            logger_file('AP:%0.3f' % metrics_info['logger']['attr']['ap'][-1])
 
 
 parser = argparse.ArgumentParser(description='PyTorch my data Training')
 args = parse_opts()
-log = Logger(filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='screen')
+log_config(args, single=True)
+log = Logger('screen', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='screen')
 logger = log.logger.info
+log_file = Logger('file', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='file')
+logger_file = log_file.logger.info
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # model, dataloader, opmiter, use ignite's evaluator
-t_net = get_model(args.conv, frm='official', name_t=args.name_t)
+t_net, _, _ = get_model(args.conv, frm='official', name_s=args.name_s, name_t=args.name_t,
+                        pretrained_t=args.pretrained_t, pretrained_s=args.pretrained_s, device=device)
 if device == 'cuda':
     t_net = torch.nn.DataParallel(t_net).cuda()
 
@@ -117,9 +140,7 @@ train_evaluator = create_supervised_evaluator(t_net, metrics={
     'multitask': MultiAttributeMetric(metrics, attr_name)}, device=device)
 val_evaluator = create_supervised_evaluator(t_net, metrics={
     'multitask': MultiAttributeMetric(metrics, attr_name)}, device=device)
-
 Saver = Saver()
-
 
 for epoch in range(1, args.n_epochs+1):
     train(t_net, epoch)

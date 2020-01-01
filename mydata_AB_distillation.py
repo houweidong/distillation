@@ -24,6 +24,7 @@ from training.get_loss_metric import get_losses_metrics
 from utils.table import print_summar_table
 from utils.logger import Logger
 from utils.opts import parse_opts
+from utils.log_config import log_config
 
 
 # Distillation
@@ -101,7 +102,7 @@ def train(net, epoch):
     for batch_idx, bt in enumerate(trainloader):
         inputs, targets = _prepare_batch(bt, device=device) if device == 'cuda' else bt
         net.module.batch_size = inputs.shape[0]
-        outputs = net(inputs, targets)
+        outputs = net(inputs)
         loss = multitask_loss(outputs, targets, criterion_CE)
 
         optimizer.optimizer.zero_grad()
@@ -144,13 +145,14 @@ class Saver(object):
             save_file_path = os.path.join(self.save_root, 'ap{}'.format(ap))
             torch.save(s_net.module.state_dict(), save_file_path)
 
-            logger_file(": Validation Results - Epoch: {}".format(epoch))
+            logger_file("val: Validation Results - Epoch: {} - LR: {}".format(epoch, optimizer.optimizer.param_groups[0]['lr']))
             print_summar_table(logger_file, attr_name, metrics_info['logger'])
             logger_file('AP:%0.3f' % metrics_info['logger']['attr']['ap'][-1])
 
 
 parser = argparse.ArgumentParser(description='PyTorch my data Training')
 args = parse_opts()
+log_config(args)
 max_epoch = args.max_epoch - args.distill_epoch
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 log = Logger('screen', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='screen')
@@ -160,11 +162,11 @@ logger_file = log_file.logger.info
 attr, attr_name = get_tasks(args)
 criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 
-# Load dataset, net, evaluator
+# Load dataset, net, evaluator, Saver
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-t_net, channel_t, layer_t = get_model(args.conv, frm='my', name_t=args.name_t)
-s_net, channel_s, layer_s = get_model(args.conv_s, name_s=args.name_s)
+t_net, channel_t, layer_t = get_model(args.conv_t, frm='my', name_t=args.name_t, pretrained=args.pretrained_t)
+s_net, channel_s, layer_s = get_model(args.conv_s, name_s=args.name_s, pretrained=args.pretrained_s)
 distill_net = AB_distill_Mobilenetl2Mobilenets(t_net, s_net, args.batch_size, args.DTL, args.loss_multiplier,
                                                channel_t, channel_s, layer_t, layer_s, criterion_CE)
 if device == 'cuda':
@@ -178,8 +180,8 @@ val_evaluator = create_supervised_evaluator(s_net, metrics={
 
 # Distillation (Initialization)
 optimizer = optim.SGD([{'params': s_net.parameters()}, {'params': distill_net.module.Connectors.parameters()}],
-                      lr=args.lr, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
-
+                      lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
+Saver = Saver()
 for epoch in range(1, int(args.distill_epoch) + 1):
     Distillation(distill_net, epoch)
 
@@ -201,4 +203,4 @@ for epoch in range(1, max_epoch+1):
     else:
         train(s_net, epoch)
     metrics_info = test(s_net, epoch)
-    Saver().save(epoch, metrics_info)
+    Saver.save(epoch, metrics_info)

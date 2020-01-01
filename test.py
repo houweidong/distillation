@@ -15,6 +15,9 @@ a = torch.BoolTensor()
 # print(r.shape)
 
 
-ap = 0.005
-a = 'ap{}'.format(ap)
-print(a)
+# from utils.log_config import log_config
+#
+# from  utils.opts import parse_opts
+# args = parse_opts()
+# args.conv = 'mobile3s'
+# log_config(args)

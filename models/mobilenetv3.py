@@ -234,10 +234,12 @@ def mobile3l(**kwargs):
     model = MobileNetV3(cfgs, mode='large')
 
     if pretrained:
+        print('loading model from {}'.format(name_t))
         path = os.path.join(root, '.torch/models/', name_t)
         state_dict = torch.load(path, map_location=device)
         strict = False if frm == 'official' else True
         model.load_state_dict(state_dict, strict=strict)
+        print('load completed')
     channels, layers = get_channels_for_distill(cfgs)
     return model, channels, layers
 
@@ -245,6 +247,7 @@ def mobile3l(**kwargs):
 def mobile3s(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
     pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
+    name_s = kwargs['name_s'] if 'name_s' in kwargs else None
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
@@ -263,9 +266,11 @@ def mobile3s(**kwargs):
     model = MobileNetV3(cfgs, mode='small')
 
     if pretrained:
-        path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
+        print('loading model from {}'.format(name_s))
+        path = os.path.join(root, '.torch/models/', name_s)
         state_dict = torch.load(path, map_location=device)
         model.load_state_dict(state_dict, strict=False)
+        print('load completed')
     channels, layers = get_channels_for_distill(cfgs)
     return model, channels, layers
 
