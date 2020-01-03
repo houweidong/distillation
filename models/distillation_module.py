@@ -418,7 +418,7 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
         out = self.t_net.avgpool(self.t_net.conv(self.t_net.features[self.layer_t[3]:](res4_t))).view(inputs.size(0), -1)
         out_ft = []
         for i in range(self.t_net.num_attr):
-            out_ti = getattr(self.t_net, 'classifier' + str(i))[0:1](out)
+            out_ti = self.t_net.classifier[i][0:1](out)
             out_ft.append(out_ti)
 
         # Student network
@@ -430,11 +430,11 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
         out = self.s_net.avgpool(self.s_net.conv(self.s_net.features[self.layer_s[3]:](res4_s))).view(inputs.size(0), -1)
         out_fs = []
         for i in range(self.s_net.num_attr):
-            out_si = getattr(self.s_net, 'classifier' + str(i))[0:1](out)
+            out_si = self.s_net.classifier[i][0:1](out)
             out_fs.append(out_si)
         out_s = []
         for i in range(self.s_net.num_attr):
-            out_si = getattr(self.s_net, 'classifier' + str(i))(out)
+            out_si = self.s_net.classifier[i](out)
             out_s.append(out_si)
         out_s = torch.cat(out_s, dim=1)
         # out = out.view(-1, 1280)
@@ -551,11 +551,7 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
         res3_t = self.t_net.features[self.layer_t[1]:self.layer_t[2]](res2_t)
         res4_t = self.t_net.features[self.layer_t[2]:self.layer_t[3]](res3_t)
 
-        out = self.t_net.avgpool(self.t_net.conv(self.t_net.features[self.layer_t[3]:](res4_t))).view(inputs.size(0), -1)
-        out_ft = []
-        for i in range(self.t_net.num_attr):
-            out_ti = getattr(self.t_net, 'classifier' + str(i))[0:1](out)
-            out_ft.append(out_ti)
+        out_ft = self.t_net.avgpool(self.t_net.conv(self.t_net.features[self.layer_t[3]:](res4_t))).view(inputs.size(0), -1)
 
         # Student network
         res1_s = self.s_net.features[0:self.layer_s[0]](inputs)
@@ -563,19 +559,12 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
         res3_s = self.s_net.features[self.layer_s[1]:self.layer_s[2]](res2_s)
         res4_s = self.s_net.features[self.layer_s[2]:self.layer_s[3]](res3_s)
 
-        out = self.s_net.avgpool(self.s_net.conv(self.s_net.features[self.layer_s[3]:](res4_s))).view(inputs.size(0), -1)
-        out_fs = []
-        for i in range(self.s_net.num_attr):
-            out_si = getattr(self.s_net, 'classifier' + str(i))[0:1](out)
-            out_fs.append(out_si)
+        out_fs = self.s_net.avgpool(self.s_net.conv(self.s_net.features[self.layer_s[3]:](res4_s))).view(inputs.size(0), -1)
         out_s = []
         for i in range(self.s_net.num_attr):
-            out_si = getattr(self.s_net, 'classifier' + str(i))(out)
+            out_si = self.s_net.classifier[i](out_fs)
             out_s.append(out_si)
         out_s = torch.cat(out_s, dim=1)
-        # out = out.view(-1, 1280)
-        # out_imagenet = self.Connectfc(out)
-        # out_s = self.s_net.classifier(out)
 
         # Features before ReLU
         res1_t = self.t_net.features[self.layer_t[0]].conv[0:2](res1_t)[:, self.selected_channels[0], :, :]
@@ -621,12 +610,8 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
 
         # DTL (Distillation in Transfer Learning) loss
         if self.DTL is True:
-            loss_DTL = torch.zeros(size=()).cuda()
-            for i in range(self.t_net.num_attr):
-                out_ti, out_si = out_ft[i], out_fs[i]
-                loss_DTL = torch.mean(torch.pow((out_ti - torch.mean(out_ti, 1, keepdim=True)).detach()
-                                                - (out_si - torch.mean(out_si, 1, keepdim=True)), 2)) * 10
-
+            loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
+                                            - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2)) * 10
             loss_DTL = loss_DTL.unsqueeze(0).unsqueeze(1)
         else:
             loss_DTL = torch.zeros(1, 1).cuda()

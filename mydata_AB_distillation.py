@@ -170,7 +170,7 @@ criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
 if args.dual_load:
-    t_net, s_net, channel_t, layer_t, channel_s, layer_s, index, classifier_ids, BN_ids = \
+    t_net, s_net, channel_t, channel_s, layer_t, layer_s, index, classifier_ids, BN_ids = \
         get_pair_model(frm='my', name_t=args.name_t, name_s=args.name_s, pretrained_s=args.pretrained_s)
     distill_net = AB_distill_Mobilenetl2MobilenetsNoConnect(t_net, s_net, args.batch_size, args.DTL, args.loss_multiplier,
                                                             channel_t, channel_s, layer_t, layer_s, criterion_CE, index)
@@ -187,6 +187,10 @@ else:
 
     distill_net = AB_distill_Mobilenetl2Mobilenets(t_net, s_net, args.batch_size, args.DTL, args.loss_multiplier,
                                                    channel_t, channel_s, layer_t, layer_s, criterion_CE)
+    if device == 'cuda':
+        s_net = torch.nn.DataParallel(s_net).cuda()
+        distill_net = torch.nn.DataParallel(distill_net).cuda()
+        cudnn.benchmark = True
     optimizer = optim.SGD([{'params': s_net.parameters()}, {'params': distill_net.Connectors.parameters()}],
                           lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
     optimizer = MultiStepLR(optimizer, milestones=[5, 30], gamma=1)
@@ -209,7 +213,7 @@ else:
     params_list = s_net.parameters()
 optimizer = optim.SGD(params_list, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
 if args.scheduler == 'step':
-    optimizer = MultiStepLR(optimizer, milestones=[30, 60], gamma=0.1)
+    optimizer = MultiStepLR(optimizer, milestones=[20, 30], gamma=0.1)
 elif args.scheduler == 'cos':
     optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-3)
 elif args.scheduler == 'pleau':
