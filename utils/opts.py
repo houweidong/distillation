@@ -279,8 +279,9 @@ def parse_opts():
     parser.add_argument('--conv_s', default='mobile3s', choices=['mobile3ss', 'mobile3s'], type=str)
     parser.add_argument('--pretrained_t', action='store_true')
     parser.add_argument('--pretrained_s', action='store_true')
-    parser.add_argument('--name_t', default='ap0.8972', type=str, help='teacher pretrained net')
+    parser.add_argument('--name_t', default='ap0.3095', type=str, help='teacher pretrained net')
     parser.add_argument('--name_s', default='mobilenetv3-small-c7eb32fe.pth', type=str, help='student pretrained net')
+    parser.add_argument('--dual_load', action='store_true')
 
     args = parser.parse_args()
     if args.log_dir:

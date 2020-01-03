@@ -9,8 +9,9 @@ import torch.nn as nn
 import math
 import torch
 import os
+from utils.get_channels import get_channels, get_name_of_alpha_and_beta
 
-__all__ = ['get_model']
+__all__ = ['get_model', 'get_pair_model', 'MobileNetV3']
 root = os.environ['HOME']
 
 
@@ -149,17 +150,21 @@ class MobileNetV3(nn.Module):
         self.features = nn.Sequential(*layers)
         # building last several layers
         self.conv = nn.Sequential(
-            conv_1x1_bn(input_channel, _make_divisible(exp_size * width_mult, 8)),
-            SELayer(_make_divisible(exp_size * width_mult, 8)) if mode == 'small' else nn.Sequential()
+            # conv_1x1_bn(input_channel, _make_divisible(exp_size * width_mult, 8)),
+            conv_1x1_bn(input_channel, 960),
+            # SELayer(960) if mode == 'small' else nn.Sequential()
+            nn.Sequential()
         )
         self.avgpool = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             h_swish()
         )
         output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 512
+        self.classifier = nn.ModuleList()
         for i in range(self.num_attr):
             classifier = nn.Sequential(
-                nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
+                # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
+                nn.Linear(960, output_channel),
                 # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
                 h_swish(),
                 nn.Dropout(0.1),
@@ -167,7 +172,7 @@ class MobileNetV3(nn.Module):
                 # nn.BatchNorm1d(num_classes) if mode == 'small' else nn.Sequential(),
                 # h_swish() if mode == 'small' else nn.Sequential()
             )
-            setattr(self, 'classifier' + str(i), classifier)
+            self.classifier.append(classifier)
         self._initialize_weights()
 
     def forward(self, x):
@@ -177,7 +182,7 @@ class MobileNetV3(nn.Module):
         x = x.view(x.size(0), -1)
         result = []
         for i in range(self.num_attr):
-            y = getattr(self, 'classifier' + str(i))(x)
+            y = self.classifier[i](x)
             result.append(y)
         return torch.cat(result, dim=1)
 
@@ -211,7 +216,7 @@ def get_channels_for_distill(cfgs):
 def mobile3l(**kwargs):
     frm = kwargs['frm'] if 'frm' in kwargs else 'my'
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
-    pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
+    pretrained = kwargs['pretrained_t'] if 'pretrained_t' in kwargs else True
     name_t = kwargs['name_t'] if 'name_t' in kwargs else None
     cfgs = [
         # k, t, c, SE, NL, s
@@ -246,7 +251,7 @@ def mobile3l(**kwargs):
 
 def mobile3s(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
-    pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
+    pretrained = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else True
     name_s = kwargs['name_s'] if 'name_s' in kwargs else None
     cfgs = [
         # k, t, c, SE, NL, s
@@ -308,3 +313,93 @@ def get_model(conv, **kwargs):
     if conv not in model:
         raise Exception('not implemented model')
     return model[conv](**kwargs)
+
+
+def get_pair_model(**kwargs):
+    device = kwargs['device'] if 'device' in kwargs else 'cuda'
+    name_t = kwargs['name_t'] if 'name_t' in kwargs else None
+    name_s = kwargs['name_s'] if 'name_s' in kwargs else None
+    pretrained_s = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else True
+    cfgs_t = [
+        # k, t, c, SE, NL, s
+        [3,  16,  16, 0, 0, 1],  # 1
+        [3,  64,  24, 0, 0, 2],  # 2                    layer2  64
+        [3,  72,  24, 0, 0, 1],  # 3
+        [5,  72,  40, 1, 0, 2],  # 4                    layer4  72
+        [5, 120,  40, 1, 0, 1],  # 5
+        [5, 120,  40, 1, 0, 1],  # 6
+        [3, 240,  80, 0, 1, 2],  # 7                    layer7  240
+        [3, 200,  80, 0, 1, 1],  # 8
+        [3, 184,  80, 0, 1, 1],  # 9
+        [3, 184,  80, 0, 1, 1],  # 10
+        [3, 480, 112, 1, 1, 1],  # 11
+        [3, 672, 112, 1, 1, 1],  # 12
+        [5, 672, 160, 1, 1, 1],  # 13
+        [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
+        [5, 960, 160, 1, 1, 1]   # 15
+    ]
+    cfgs_s = [
+        # k, t, c, SE, NL, s
+        [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
+        [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
+        [3,  88,  24, 0, 0, 1],  # 3
+        [5,  96,  40, 1, 1, 2],  # 4                    layer4  96
+        [5, 240,  40, 1, 1, 1],  # 5
+        [5, 240,  40, 1, 1, 1],  # 6
+        [5, 120,  48, 1, 1, 1],  # 7
+        [5, 144,  48, 1, 1, 1],  # 8
+        [5, 288,  96, 1, 1, 2],  # 9                    layer9  288
+        [5, 576,  96, 1, 1, 1],  # 10
+        [5, 576,  96, 1, 1, 1],  # 11
+    ]
+    model_t = MobileNetV3(cfgs_t, mode='large')
+    channels_t, layers_t = get_channels_for_distill(cfgs_t)
+    print('loading model from {}'.format(name_t))
+    path_t = os.path.join(root, '.torch/models/', name_t)
+    state_dict_t = torch.load(path_t, map_location=device)
+    model_t.load_state_dict(state_dict_t, strict=True)
+    print('load completed')
+
+    model_s = MobileNetV3(cfgs_s, mode='small')
+    channels_s, layers_s = get_channels_for_distill(cfgs_s)
+    index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform')
+    if pretrained_s:
+        print('loading model from {}'.format(name_s))
+        path_s = os.path.join(root, '.torch/models/', name_s)
+        state_dict_s = torch.load(path_s, map_location=device)
+
+        print('update last conv and classifier param in state_dict from teacher')
+        for k in list(state_dict_s.keys()):
+            if k.startswith('classifier') or k.startswith('conv.1.fc.'):
+                state_dict_s.pop(k)
+        for k, v in state_dict_t.items():
+            if k.startswith('classifier') or k.startswith('conv.0.1.'):
+                state_dict_s[k] = v
+            state_dict_s['conv.0.0.weight'] = state_dict_t['conv.0.0.weight'][:, 0:cfgs_t[-1][2]//cfgs_s[-1][2]*cfgs_s[-1][2]:cfgs_t[-1][2]//cfgs_s[-1][2], :, :]
+        print('update the last conv classifier param completed')
+
+        print('update distill BN param in state_dict from teacher')
+        for i in range(len(layers_s)):
+            if i != 0:
+                alpha_sn, beta_sn = get_name_of_alpha_and_beta(layers_s[i])
+                state_dict_s[alpha_sn] = alpha[i]
+                state_dict_s[beta_sn] = beta[i]
+            else:
+                alpha_sn, beta_sn = 'features.0.1.weight', 'features.0.1.bias'
+                state_dict_s[alpha_sn] = alpha[i]
+                state_dict_s[beta_sn] = beta[i]
+        print('update distill BN param completed')
+        model_s.load_state_dict(state_dict_s, strict=True)
+        print('load student completed')
+
+    classifier_ids = list(map(id, model_s.classifier.parameters()))
+
+    BN_ids = []
+    for i in range(len(layers_s)):
+        if i != 0:
+            BN_id = list(map(id, model_s.features[layers_s[i]].conv[1].parameters()))
+        else:
+            BN_id = list(map(id, model_s.features[0][1].parameters()))
+        BN_ids.extend(BN_id)
+
+    return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, classifier_ids, BN_ids
