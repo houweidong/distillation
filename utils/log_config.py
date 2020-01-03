@@ -3,15 +3,16 @@ from collections import OrderedDict
 import os
 
 
-def log_config(args, single=False):
-    log = Logger('both', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='both')
-    logger = log.logger.info
+def log_config(args, logger=None, single=False):
+    if not logger:
+        log = Logger('both', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='both')
+        logger = log.logger.info
 
     log_names = ['conv_t', 'conv_s', 'pretrained_t', 'pretrained_s', 'name_t', 'name_s', 'DTL', 'distill_epoch', 'max_epoch',
                  'lr', 'nesterov', 'scheduler']
     pop_list = []
     if single:
-        pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s']
+        pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s', 'DTL']
         if args.conv in ['mobile3l']:
             pop_list.extend(['pretrained_s', 'name_s'])
         elif args.conv in ['mobile3s', 'mobile3ss']:

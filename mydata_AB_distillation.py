@@ -29,7 +29,7 @@ from utils.log_config import log_config
 
 # Distillation
 def Distillation(distill_net, epoch, withCE=False):
-    print('\nDistillation Epoch: %d  LR: %.4f' % (epoch, optimizer.param_groups[0]['lr']))
+    logger('\nDistillation Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
 
     distill_net.train()
     distill_net.module.s_net.train()
@@ -51,9 +51,9 @@ def Distillation(distill_net, epoch, withCE=False):
 
         loss_AT1, loss_AT2, loss_AT3, loss_AT4 = outputs[:, 3].mean(), outputs[:, 4].mean(), outputs[:, 5].mean(), outputs[:, 6].mean()
 
-        optimizer.zero_grad()
+        optimizer.optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        optimizer.optimizer.step()
 
         train_loss += loss.item()
         train_loss1 += loss_AT1.item()
@@ -61,15 +61,19 @@ def Distillation(distill_net, epoch, withCE=False):
         train_loss3 += loss_AT3.item()
         train_loss4 += loss_AT4.item()
 
+        similarity1 = 100 * (1 - train_loss1 / (batch_idx+1))
+        similarity2 = 100 * (1 - train_loss2 / (batch_idx+1))
+        similarity3 = 100 * (1 - train_loss3 / (batch_idx+1))
+        similarity4 = 100 * (1 - train_loss4 / (batch_idx+1))
         if batch_idx % 20 == 0:
-            print('similarity1: %.1f  similarity2: %.1f  similarity3: %.1f  similarity4: %.1f[%d/%d]'
-                  % (100 * (1 - train_loss1 / (batch_idx+1)), (100 * (1 - train_loss2 / (batch_idx+1))),
-                     (100 * (1 - train_loss3 / (batch_idx+1))), (100 * (1 - train_loss4 / (batch_idx+1))), batch_idx, bt_sum))
+            logger('similarity1: %.1f  similarity2: %.1f  similarity3: %.1f  similarity4: %.1f[%d/%d]'
+                  % (similarity1, similarity2, similarity3, similarity4, batch_idx, bt_sum))
 
+    optimizer.step()
 
 # Training with DTL(Distillation in Transfer Learning) loss
 def train_DTL(distill_net, epoch):
-    print('\nClassification training Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
+    logger('\nClassification training Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
     distill_net.train()
     distill_net.module.s_net.train()
     distill_net.module.t_net.eval()
@@ -90,13 +94,13 @@ def train_DTL(distill_net, epoch):
         optimizer.optimizer.step()
 
         if batch_idx % 20 == 0:
-            print('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
+            logger('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
 
 
 # Training
 def train(net, epoch):
     # epoch_start_time = time.time()
-    print('\nClassification training Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
+    logger('\nClassification training Epoch: %d  LR: %.4f' % (epoch, optimizer.optimizer.param_groups[0]['lr']))
     net.train()
     bt_sum = len(trainloader)
     for batch_idx, bt in enumerate(trainloader):
@@ -110,7 +114,7 @@ def train(net, epoch):
         optimizer.optimizer.step()
 
         if batch_idx % 20 == 0:
-            print('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
+            logger('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
 
 
 # Test
@@ -152,11 +156,11 @@ class Saver(object):
 
 parser = argparse.ArgumentParser(description='PyTorch my data Training')
 args = parse_opts()
-log_config(args)
 max_epoch = args.max_epoch - args.distill_epoch
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-log = Logger('screen', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='screen')
+log = Logger('both', filename=os.path.join(args.log_dir, args.log_file + '_all'), level='debug', mode='both')
 logger = log.logger.info
+log_config(args, logger)
 log_file = Logger('file', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='file')
 logger_file = log_file.logger.info
 attr, attr_name = get_tasks(args)
@@ -181,6 +185,7 @@ val_evaluator = create_supervised_evaluator(s_net, metrics={
 # Distillation (Initialization)
 optimizer = optim.SGD([{'params': s_net.parameters()}, {'params': distill_net.module.Connectors.parameters()}],
                       lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
+optimizer = MultiStepLR(optimizer, milestones=[5, 30], gamma=1)
 Saver = Saver()
 for epoch in range(1, int(args.distill_epoch) + 1):
     Distillation(distill_net, epoch)
@@ -193,7 +198,7 @@ if args.scheduler == 'step':
 elif args.scheduler == 'cos':
     optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-3)
 elif args.scheduler == 'pleau':
-    optimizer = ReduceLROnPlateau(optimizer)
+    optimizer = ReduceLROnPlateau(optimizer, mode='max', patience=3)
 else:
     raise Exception('not implement scheduler')
 

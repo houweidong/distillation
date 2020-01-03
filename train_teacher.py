@@ -29,11 +29,11 @@ from utils.log_config import log_config
 # Training
 def train(net, epoch):
     # epoch_start_time = time.time()
-    print('\nClassification training Epoch: %d' % epoch)
+    logger('\nClassification training Epoch: %d' % epoch)
     net.train()
     # train_loss = 0
     bt_sum = len(trainloader)
-    print('lr: %.4f' % optimizer.optimizer.param_groups[0]['lr'])
+    logger('lr: %.4f' % optimizer.optimizer.param_groups[0]['lr'])
     for batch_idx, bt in enumerate(trainloader):
         inputs, targets = _prepare_batch(bt, device=device) if device == 'cuda' else bt
         outputs = net(inputs)
@@ -43,9 +43,9 @@ def train(net, epoch):
         loss.backward()
         optimizer.optimizer.step()
         # train_loss += loss.item()
-        # print('Train \t Time Taken: %.2f sec' % (time.time() - epoch_start_time))
+        # logger('Train \t Time Taken: %.2f sec' % (time.time() - epoch_start_time))
         if batch_idx % 20 == 0:
-            print('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
+            logger('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
 
 
 # Test
@@ -101,16 +101,16 @@ class Saver(object):
             save_file_path = os.path.join(self.save_root, 'ap{}'.format(ap))
             torch.save(t_net.module.state_dict(), save_file_path)
 
-            logger_file(": Validation Results - Epoch: {}".format(epoch))
+            logger_file("val: Validation Results - Epoch: {} - LR: {}".format(epoch, optimizer.optimizer.param_groups[0]['lr']))
             print_summar_table(logger_file, attr_name, metrics_info['logger'])
             logger_file('AP:%0.3f' % metrics_info['logger']['attr']['ap'][-1])
 
 
 parser = argparse.ArgumentParser(description='PyTorch my data Training')
 args = parse_opts()
-log_config(args, single=True)
-log = Logger('screen', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='screen')
+log = Logger('both', filename=os.path.join(args.log_dir, args.log_file + '_all'), level='debug', mode='both')
 logger = log.logger.info
+log_config(args, logger, single=True)
 log_file = Logger('file', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='file')
 logger_file = log_file.logger.info
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -132,7 +132,7 @@ if args.scheduler == 'step':
 elif args.scheduler == 'cos':
     optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-3)
 elif args.scheduler == 'pleau':
-    optimizer = ReduceLROnPlateau(optimizer)
+    optimizer = ReduceLROnPlateau(optimizer, mode='max', patience=5)
 else:
     raise Exception('not implement scheduler')
 
