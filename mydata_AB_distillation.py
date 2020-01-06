@@ -43,9 +43,12 @@ def Distillation(distill_net, epoch, withCE=False):
         outputs = distill_net(inputs, targets)
         bt_sum = len(trainloader)
         loss = outputs[:, 0].sum()
+        loss_AT = loss.item()
 
         if args.DTL is True:
-            loss += outputs[:, 2].sum()
+            loss1 = outputs[:, 2].sum()
+            loss += loss1
+            loss_DTL = loss1.item()
         if withCE is True:
             loss += outputs[:, 1].sum()
 
@@ -66,8 +69,8 @@ def Distillation(distill_net, epoch, withCE=False):
         similarity3 = 100 * (1 - train_loss3 / (batch_idx+1))
         similarity4 = 100 * (1 - train_loss4 / (batch_idx+1))
         if batch_idx % 20 == 0:
-            logger('similarity1: %.1f  similarity2: %.1f  similarity3: %.1f  similarity4: %.1f[%d/%d]'
-                  % (similarity1, similarity2, similarity3, similarity4, batch_idx, bt_sum))
+            logger('similarity1: %.1f  similarity2: %.1f  similarity3: %.1f  similarity4: %.1f  loss_AT: %.3f  loss_DTL: %.3f[%d/%d]'
+                  % (similarity1, similarity2, similarity3, similarity4, loss_AT, loss_DTL, batch_idx, bt_sum))
 
     optimizer.step()
 
@@ -85,16 +88,19 @@ def train_DTL(distill_net, epoch):
 
         # CE loss
         loss = outputs[:, 1].sum()
+        loss_CE = loss.item()
 
         if args.DTL:
             # DTL loss
-            loss += outputs[:, 2].sum()
+            loss1 = outputs[:, 2].sum()
+            loss += loss1
+            loss_DTL = loss1.item()
         optimizer.optimizer.zero_grad()
         loss.backward()
         optimizer.optimizer.step()
 
         if batch_idx % 20 == 0:
-            logger('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
+            logger('Loss: %.3f Loss_CE: %.3f Loss_DTL %.3f[%d/%d] ' % (loss.item(), loss_CE, loss_DTL, batch_idx, bt_sum))
 
 
 # Training
