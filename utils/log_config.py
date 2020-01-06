@@ -13,7 +13,8 @@ def log_config(args, logger=None, single=False):
                  'lr', 'nesterov', 'scheduler']
     pop_list = []
     if single:
-        pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s', 'DTL', 'stage1', 'direct_connect', 'AB_loss_multiplier']
+        pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s', 'DTL', 'stage1', 'direct_connect',
+                    'AB_loss_multiplier', 'DTL_loss_multiplier', 'load_BN']
         if args.conv in ['mobile3l']:
             pop_list.extend(['pretrained_s', 'name_s'])
         elif args.conv in ['mobile3s', 'mobile3ss']:

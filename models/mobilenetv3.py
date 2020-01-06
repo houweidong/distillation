@@ -151,7 +151,7 @@ class MobileNetV3(nn.Module):
         # building last several layers
         self.conv = nn.Sequential(
             # conv_1x1_bn(input_channel, _make_divisible(exp_size * width_mult, 8)),
-            conv_1x1_bn(input_channel, 480),
+            conv_1x1_bn(input_channel, 256),
             # SELayer(960) if mode == 'small' else nn.Sequential()
             nn.Sequential()
         )
@@ -164,7 +164,7 @@ class MobileNetV3(nn.Module):
         for i in range(self.num_attr):
             classifier = nn.Sequential(
                 # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
-                nn.Linear(480, output_channel),
+                nn.Linear(256, output_channel),
                 # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
                 h_swish(),
                 nn.Dropout(0.1),
@@ -216,9 +216,9 @@ def get_channels_for_distill(cfgs):
 def mobile3l(**kwargs):
     frm = kwargs['frm'] if 'frm' in kwargs else 'my'
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
-    pretrained = kwargs['pretrained_t'] if 'pretrained_t' in kwargs else True
+    pretrained = kwargs['pretrained_t'] if 'pretrained_t' in kwargs else False
     name_t = kwargs['name_t'] if 'name_t' in kwargs else None
-    logger = kwargs['logger']
+    logger = kwargs['logger'] if 'logger' in kwargs else print
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -240,7 +240,7 @@ def mobile3l(**kwargs):
     model = MobileNetV3(cfgs, mode='large')
 
     if pretrained:
-        logger('loading model from {}'.format(name_t))
+        logger('\nloading model from {}'.format(name_t))
         path = os.path.join(root, '.torch/models/', name_t)
         state_dict = torch.load(path, map_location=device)
         strict = False if frm == 'official' else True
@@ -257,9 +257,9 @@ def mobile3l(**kwargs):
 
 def mobile3s(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
-    pretrained = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else True
+    pretrained = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else False
     name_s = kwargs['name_s'] if 'name_s' in kwargs else None
-    logger = kwargs['logger']
+    logger = kwargs['logger'] if 'logger' in kwargs else print
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
@@ -278,9 +278,12 @@ def mobile3s(**kwargs):
     model = MobileNetV3(cfgs, mode='small')
 
     if pretrained:
-        logger('loading model from {}'.format(name_s))
+        logger('\nloading model from {}'.format(name_s))
         path = os.path.join(root, '.torch/models/', name_s)
         state_dict = torch.load(path, map_location=device)
+        for k in list(state_dict.keys()):
+            if k.startswith('conv.0.'):
+                state_dict.pop(k)
         model.load_state_dict(state_dict, strict=False)
         logger('load completed')
     channels, layers = get_channels_for_distill(cfgs)

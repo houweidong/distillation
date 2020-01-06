@@ -270,10 +270,10 @@ def parse_opts():
         type=str,
         choices=['pic', 'train_dir', 'camera'],
         help='pic: a single picture,  train_dir: the train set and val set,  camera: for the real time test')
-    parser.add_argument('--AB_loss_multiplier', default=4000, type=float, help='multiplier to loss')
-    parser.add_argument('--DTL_loss_multiplier', default=200, type=float, help='multiplier to loss')
+    parser.add_argument('--AB_loss_multiplier', default=30, type=float, help='multiplier to loss')
+    parser.add_argument('--DTL_loss_multiplier', default=100, type=float, help='multiplier to loss')
     parser.add_argument('--DTL', action='store_true', help='DTL (Distillation in Transfer Learning) method')
-    parser.add_argument('--distill_epoch', default=20, type=int, help='epoch for distillation')
+    parser.add_argument('--distill_epoch', default=50, type=int, help='epoch for distillation')
     parser.add_argument('--max_epoch', default=160, type=int, help='epoch for all')
 
     parser.add_argument('--conv_t', default='mobile3l', choices=['mobile3l', 'resnet50', 'resnet18'], type=str)
@@ -285,6 +285,7 @@ def parse_opts():
     parser.add_argument('--direct_connect', action='store_true')
     parser.add_argument('--stage1', action='store_true')
     parser.add_argument('--load_BN', action='store_true')
+    parser.add_argument('--DTL_loss', default='l1', choices=['l1', 'l2', 'l2_mean'], type=str)
     args = parser.parse_args()
     if args.log_dir:
         args.log_dir = os.path.join(args.result_path, args.log_dir)

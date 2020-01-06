@@ -179,10 +179,10 @@ t_net, s_net, channel_t, channel_s, layer_t, layer_s, index, filter_list = \
                    load_BN=args.load_BN, mode='dual', logger=logger)
 if args.direct_connect:
     distill_net = AB_distill_Mobilenetl2MobilenetsNoConnect(t_net, s_net, args.batch_size, args.DTL,
-        args.AB_loss_multiplier, args.DTL_loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE, index)
+        args.AB_loss_multiplier, args.DTL_loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE, index, args.DTL_loss)
 else:
     distill_net = AB_distill_Mobilenetl2Mobilenets(t_net, s_net, args.batch_size, args.DTL, args.AB_loss_multiplier,
-        args.DTL_loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE, args.stage1)
+        args.DTL_loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE, args.stage1, args.DTL_loss)
 if device == 'cuda':
     s_net = torch.nn.DataParallel(s_net).cuda()
     distill_net = torch.nn.DataParallel(distill_net).cuda()

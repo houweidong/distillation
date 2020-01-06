@@ -128,11 +128,11 @@ trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[
 optimizer = optim.SGD(t_net.parameters(), lr=args.lr, nesterov=args.nesterov, momentum=args.momentum, weight_decay=args.weight_decay)
 # optimizer = optim.adam
 if args.scheduler == 'step':
-    optimizer = MultiStepLR(optimizer, milestones=[15, 25], gamma=0.1)
+    optimizer = MultiStepLR(optimizer, milestones=[10, 15], gamma=0.1)
 elif args.scheduler == 'cos':
     optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-3)
 elif args.scheduler == 'pleau':
-    optimizer = ReduceLROnPlateau(optimizer, mode='max', patience=5)
+    optimizer = ReduceLROnPlateau(optimizer, mode='max', patience=3)
 else:
     raise Exception('not implement scheduler')
 
