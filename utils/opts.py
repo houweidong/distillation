@@ -270,7 +270,8 @@ def parse_opts():
         type=str,
         choices=['pic', 'train_dir', 'camera'],
         help='pic: a single picture,  train_dir: the train set and val set,  camera: for the real time test')
-    parser.add_argument('--loss_multiplier', default=1, type=float, help='multiplier to loss')
+    parser.add_argument('--AB_loss_multiplier', default=100, type=float, help='multiplier to loss')
+    parser.add_argument('--DTL_loss_multiplier', default=4000, type=float, help='multiplier to loss')
     parser.add_argument('--DTL', action='store_true', help='DTL (Distillation in Transfer Learning) method')
     parser.add_argument('--distill_epoch', default=20, type=int, help='epoch for distillation')
     parser.add_argument('--max_epoch', default=160, type=int, help='epoch for all')

@@ -346,21 +346,21 @@ class AB_distill_Resnet2mobilenet(nn.Module):
         # Return all losses
         return torch.cat([loss, loss_CE, loss_DTL, loss_AT4, loss_AT3, loss_AT2, loss_AT1, correct], dim=1)
 
+
 ##########################
 # large Mobilenetv3 to small Mobilenetv3
 # For transfer learning
 ###########################
-
-# Designed for data parallel
 class AB_distill_Mobilenetl2Mobilenets(nn.Module):
 
     # Proposed alternative loss function
     def criterion_active_L2(self, source, target, margin):
         loss = ((source + margin) ** 2 * ((source > -margin) & (target <= 0)).float() +
                 (source - margin) ** 2 * ((source <= margin) & (target > 0)).float())
-        return torch.abs(loss).sum()
+        return torch.abs(loss).mean()
 
-    def __init__(self, t_net, s_net, batch_size, DTL, loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE, stage1):
+    def __init__(self, t_net, s_net, batch_size, DTL, AB_loss_multiplier, DTL_loss_multiplier, channel_t, channel_s,
+                 layer_t, layer_s, criterion_CE, stage1):
         super(AB_distill_Mobilenetl2Mobilenets, self).__init__()
 
         self.channel_t = channel_t
@@ -368,7 +368,8 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
         self.layer_t = layer_t
         self.layer_s = layer_s
         self.batch_size = batch_size
-        self.loss_multiplier = loss_multiplier
+        self.AB_loss_multiplier = AB_loss_multiplier
+        self.DTL_loss_multiplier = DTL_loss_multiplier
         self.DTL = DTL
         self.expansion = 6
 
@@ -450,11 +451,14 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
 
             # Alternative loss
             margin = 1.0
+            # loss = self.criterion_active_L2(self.Connect4(res4_s), res4_t.detach(), margin) / self.batch_size
+            # loss += self.criterion_active_L2(self.Connect3(res3_s), res3_t.detach(), margin) / self.batch_size / (self.channel_t[-2]*4/self.channel_t[-1])
+            # loss += self.criterion_active_L2(self.Connect2(res2_s), res2_t.detach(), margin) / self.batch_size / (self.channel_t[-3]*16/self.channel_t[-1])
+            # loss += self.criterion_active_L2(self.Connect1(res1_s), res1_t.detach(), margin) / self.batch_size / (self.channel_t[-4]*64/self.channel_t[-1])
             loss = self.criterion_active_L2(self.Connect4(res4_s), res4_t.detach(), margin) / self.batch_size
-            loss += self.criterion_active_L2(self.Connect3(res3_s), res3_t.detach(), margin) / self.batch_size / (self.channel_t[-2]*4/self.channel_t[-1])
-            loss += self.criterion_active_L2(self.Connect2(res2_s), res2_t.detach(), margin) / self.batch_size / (self.channel_t[-3]*16/self.channel_t[-1])
-            loss += self.criterion_active_L2(self.Connect1(res1_s), res1_t.detach(), margin) / self.batch_size / (self.channel_t[-4]*64/self.channel_t[-1])
-            loss /= 1000
+            loss += self.criterion_active_L2(self.Connect3(res3_s), res3_t.detach(), margin) / self.batch_size
+            loss += self.criterion_active_L2(self.Connect2(res2_s), res2_t.detach(), margin) / self.batch_size
+            loss += self.criterion_active_L2(self.Connect1(res1_s), res1_t.detach(), margin) / self.batch_size
             loss = loss.unsqueeze(0).unsqueeze(1)
         else:
             loss = torch.zeros(1, 1).cuda()
@@ -463,7 +467,7 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
             loss_AT2 = torch.zeros(1, 1).cuda()
             loss_AT1 = torch.zeros(1, 1).cuda()
 
-        loss *= self.loss_multiplier
+        loss *= self.AB_loss_multiplier
 
         # Cross-entropy loss
         loss_CE = multitask_loss(out_s, targets, self.criterion_CE)
@@ -471,12 +475,13 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
 
         # DTL (Distillation in Transfer Learning) loss
         if self.DTL is True:
-            loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
-                                            - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2)) * 200
+            # loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
+            #                                 - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2)) / self.batch_size
+            loss_DTL = torch.mean(torch.pow(out_ft - out_fs, 2)) / self.batch_size
             loss_DTL = loss_DTL.unsqueeze(0).unsqueeze(1)
         else:
             loss_DTL = torch.zeros(1, 1).cuda()
-
+        loss_DTL *= self.DTL_loss_multiplier
         return torch.cat([loss, loss_CE, loss_DTL, loss_AT1, loss_AT2, loss_AT3, loss_AT4], dim=1)
 
 
@@ -492,9 +497,9 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
     def criterion_active_L2(self, source, target, margin):
         loss = ((source + margin) ** 2 * ((source > -margin) & (target <= 0)).float() +
                 (source - margin) ** 2 * ((source <= margin) & (target > 0)).float())
-        return torch.abs(loss).sum()
+        return torch.abs(loss).mean()
 
-    def __init__(self, t_net, s_net, batch_size, DTL, loss_multiplier, channel_t, channel_s, layer_t, layer_s,
+    def __init__(self, t_net, s_net, batch_size, DTL, AB_loss_multiplier, DTL_loss_multiplier, channel_t, channel_s, layer_t, layer_s,
                  criterion_CE, selected_channels):
         super(AB_distill_Mobilenetl2MobilenetsNoConnect, self).__init__()
 
@@ -503,7 +508,8 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
         self.layer_t = layer_t
         self.layer_s = layer_s
         self.batch_size = batch_size
-        self.loss_multiplier = loss_multiplier
+        self.AB_loss_multiplier = AB_loss_multiplier
+        self.DTL_loss_multiplier = DTL_loss_multiplier
         self.DTL = DTL
         self.expansion = 6
 
@@ -564,18 +570,19 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
         # Alternative loss
         if self.stage1 is True:
             margin = 1.0
+            # loss = self.criterion_active_L2(res4_s, res4_t.detach(), margin) / self.batch_size
+            # loss += self.criterion_active_L2(res3_s, res3_t.detach(), margin) / self.batch_size / (self.channel_t[-2]*4/self.channel_t[-1])
+            # loss += self.criterion_active_L2(res2_s, res2_t.detach(), margin) / self.batch_size / (self.channel_t[-3]*16/self.channel_t[-1])
+            # loss += self.criterion_active_L2(res1_s, res1_t.detach(), margin) / self.batch_size / (self.channel_t[-4]*64/self.channel_t[-1])
             loss = self.criterion_active_L2(res4_s, res4_t.detach(), margin) / self.batch_size
-            loss += self.criterion_active_L2(res3_s, res3_t.detach(), margin) / self.batch_size / (self.channel_t[-2]*4/self.channel_t[-1])
-            loss += self.criterion_active_L2(res2_s, res2_t.detach(), margin) / self.batch_size / (self.channel_t[-3]*16/self.channel_t[-1])
-            loss += self.criterion_active_L2(res1_s, res1_t.detach(), margin) / self.batch_size / (self.channel_t[-4]*64/self.channel_t[-1])
-
-            loss /= 1000
-
+            loss += self.criterion_active_L2(res3_s, res3_t.detach(), margin) / self.batch_size
+            loss += self.criterion_active_L2(res2_s, res2_t.detach(), margin) / self.batch_size
+            loss += self.criterion_active_L2(res1_s, res1_t.detach(), margin) / self.batch_size
             loss = loss.unsqueeze(0).unsqueeze(1)
         else:
             loss = torch.zeros(1, 1).cuda()
 
-        loss *= self.loss_multiplier
+        loss *= self.AB_loss_multiplier
 
         # Cross-entropy loss
         loss_CE = multitask_loss(out_s, targets, self.criterion_CE)
@@ -583,12 +590,13 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
 
         # DTL (Distillation in Transfer Learning) loss
         if self.DTL is True:
-            loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
-                                            - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2)) * 200
+            # loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
+            #                                 - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2)) * 200
+            loss_DTL = torch.mean(torch.pow(out_ft - out_fs, 2)) / self.batch_size
             loss_DTL = loss_DTL.unsqueeze(0).unsqueeze(1)
         else:
             loss_DTL = torch.zeros(1, 1).cuda()
-
+        loss_DTL *= self.DTL_loss_multiplier
         # Training accuracy
         # _, predicted = torch.max(out_s.data, 1)
         # correct = predicted.eq(targets.data).sum().float().unsqueeze(0).unsqueeze(1)

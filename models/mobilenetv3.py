@@ -218,6 +218,7 @@ def mobile3l(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
     pretrained = kwargs['pretrained_t'] if 'pretrained_t' in kwargs else True
     name_t = kwargs['name_t'] if 'name_t' in kwargs else None
+    logger = kwargs['logger']
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -239,12 +240,12 @@ def mobile3l(**kwargs):
     model = MobileNetV3(cfgs, mode='large')
 
     if pretrained:
-        print('loading model from {}'.format(name_t))
+        logger('loading model from {}'.format(name_t))
         path = os.path.join(root, '.torch/models/', name_t)
         state_dict = torch.load(path, map_location=device)
         strict = False if frm == 'official' else True
         model.load_state_dict(state_dict, strict=strict)
-        print('load completed')
+        logger('load completed')
     channels, layers = get_channels_for_distill(cfgs)
     return model, channels, layers
 
@@ -253,6 +254,7 @@ def mobile3s(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
     pretrained = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else True
     name_s = kwargs['name_s'] if 'name_s' in kwargs else None
+    logger = kwargs['logger']
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
@@ -271,11 +273,11 @@ def mobile3s(**kwargs):
     model = MobileNetV3(cfgs, mode='small')
 
     if pretrained:
-        print('loading model from {}'.format(name_s))
+        logger('loading model from {}'.format(name_s))
         path = os.path.join(root, '.torch/models/', name_s)
         state_dict = torch.load(path, map_location=device)
         model.load_state_dict(state_dict, strict=False)
-        print('load completed')
+        logger('load completed')
     channels, layers = get_channels_for_distill(cfgs)
     return model, channels, layers
 
@@ -321,6 +323,7 @@ def get_pair_model(**kwargs):
     name_s = kwargs['name_s']
     mode = kwargs['mode']
     load_BN = kwargs['load_BN']
+    logger = kwargs['logger']
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -356,20 +359,20 @@ def get_pair_model(**kwargs):
     ]
     model_t = MobileNetV3(cfgs_t, mode='large')
     channels_t, layers_t = get_channels_for_distill(cfgs_t)
-    print('loading model from {}'.format(name_t))
+    logger('\nloading model from {}'.format(name_t))
     path_t = os.path.join(root, '.torch/models/', name_t)
     state_dict_t = torch.load(path_t, map_location=device)
-    print('load completed')
+    logger('load completed')
 
     model_s = MobileNetV3(cfgs_s, mode='small')
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
     index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform')
 
-    print('loading model from {}'.format(name_s))
+    logger('loading model from {}'.format(name_s))
     path_s = os.path.join(root, '.torch/models/', name_s)
     state_dict_s = torch.load(path_s, map_location=device)
 
-    print('update last conv and classifier param in state_dict from teacher')
+    logger(' update last conv and classifier param in state_dict from teacher')
     for k in list(state_dict_s.keys()):
         # exclude the last conv's SE layer(for reducing params num) and
         # classifier layer(for performance and align problem)
@@ -381,10 +384,10 @@ def get_pair_model(**kwargs):
             state_dict_s[k] = v
         # load the conv's conv params from teacher because the align problem
         state_dict_s['conv.0.0.weight'] = state_dict_t['conv.0.0.weight'][:, 0:cfgs_t[-1][2]//cfgs_s[-1][2]*cfgs_s[-1][2]:cfgs_t[-1][2]//cfgs_s[-1][2], :, :]
-    print('update the last conv classifier param completed')
+    logger(' update the last conv classifier param completed')
 
     if load_BN:
-        print('update distill BN param in state_dict from teacher')
+        logger(' update distill BN param in state_dict from teacher')
         for i in range(len(layers_s)):
             if i != 0:
                 alpha_sn, beta_sn = get_name_of_alpha_and_beta(layers_s[i])
@@ -394,9 +397,9 @@ def get_pair_model(**kwargs):
                 alpha_sn, beta_sn = 'features.0.1.weight', 'features.0.1.bias'
                 state_dict_s[alpha_sn] = alpha[i]
                 state_dict_s[beta_sn] = beta[i]
-        print('update distill BN param completed')
+        logger(' update distill BN param completed')
         model_s.load_state_dict(state_dict_s, strict=True)
-    print('load student completed')
+    logger('load student completed')
 
     # the last conv's bn layers has strong correlation with the features used to classify, so
     # this layer is divided to the classification's params
