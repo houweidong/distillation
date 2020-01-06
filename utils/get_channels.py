@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-
+from matplotlib import pyplot as plt
 
 # [4, 5, 3, 0, 6, 13, 15, 8, 8, 2] [-0.56730014, -0.40980357, -0.252307, -0.09481044, 0.06268612, 0.22018269, 0.37767926, 0.5351758, 0.6926724, 0.85016894, 1.0076655]
 # [2, 0, 4, 3, 9, 7, 11, 11, 10, 7] [-0.5200588, -0.38907784, -0.25809687, -0.1271159, 0.0038650632, 0.13484603, 0.265827, 0.39680797, 0.52778894, 0.6587699, 0.7897509]
@@ -41,7 +41,7 @@ def distance(a, max_pair, mode):
         raise Exception('mode not supported')
 
 
-def select_channel_ac_mean_var(alpha, beta, channel_nums, mode):
+def select_channel_ac_mean_var(alpha, beta, channel_nums, mode, bucket=1):
     """
     # type: (Tensor, Tensor, int, str) -> list
     Select some channels from all channels according to alpha and beta
@@ -57,8 +57,8 @@ def select_channel_ac_mean_var(alpha, beta, channel_nums, mode):
     :return index: index of selected channels, whose length is channel_nums
     """
     assert mode in ['uniform', 'high-mean', 'high-var', 'high-all']
-    alpha = alpha.cpu().numpy()[:, np.newaxis]
-    beta = beta.cpu().numpy()[:, np.newaxis]
+    alpha = alpha.cpu().numpy()
+    beta = beta.cpu().numpy()
     # alpha_bin = np.histogram(alpha, 10)
     # beta_bin = np.histogram(beta, 10)
     # max_pair = np.array([np.max(alpha), np.max(beta)])
@@ -86,10 +86,15 @@ def get_name_of_alpha_and_beta(layer):
 
 
 def get_channels(model_dict, layers_t, channels_s, mode):
+    color = {0: 'green', 1: 'red', 2: 'blue', 3: 'skyblue'}
     indexs, alphas, betas = [], [], []
     for i, ly in enumerate(layers_t):
         alpha_n, beta_n = get_name_of_alpha_and_beta(layers_t[i])
         alpha, beta = model_dict[alpha_n], model_dict[beta_n]
+        # x_axit = np.arange(len(alpha.cpu().numpy()))
+        # plt.plot(x_axit, beta.cpu().numpy(), color=color[i], label=str(i))
+        # plt.show()
+        # plt.plot(x_axit, beta, color='red', label='beta')
         ind = select_channel_ac_mean_var(alpha, beta, channels_s[i], mode)
         alphas.append(alpha[ind])
         betas.append(beta[ind])

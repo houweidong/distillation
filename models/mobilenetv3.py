@@ -151,7 +151,7 @@ class MobileNetV3(nn.Module):
         # building last several layers
         self.conv = nn.Sequential(
             # conv_1x1_bn(input_channel, _make_divisible(exp_size * width_mult, 8)),
-            conv_1x1_bn(input_channel, 960),
+            conv_1x1_bn(input_channel, 480),
             # SELayer(960) if mode == 'small' else nn.Sequential()
             nn.Sequential()
         )
@@ -159,12 +159,12 @@ class MobileNetV3(nn.Module):
             nn.AdaptiveAvgPool2d((1, 1)),
             h_swish()
         )
-        output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 512
+        output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 256
         self.classifier = nn.ModuleList()
         for i in range(self.num_attr):
             classifier = nn.Sequential(
                 # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
-                nn.Linear(960, output_channel),
+                nn.Linear(480, output_channel),
                 # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
                 h_swish(),
                 nn.Dropout(0.1),
@@ -244,7 +244,12 @@ def mobile3l(**kwargs):
         path = os.path.join(root, '.torch/models/', name_t)
         state_dict = torch.load(path, map_location=device)
         strict = False if frm == 'official' else True
+        if not strict:
+            for k in list(state_dict.keys()):
+                if k.startswith('conv.0.'):
+                    state_dict.pop(k)
         model.load_state_dict(state_dict, strict=strict)
+
         logger('load completed')
     channels, layers = get_channels_for_distill(cfgs)
     return model, channels, layers

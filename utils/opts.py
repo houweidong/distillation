@@ -65,7 +65,7 @@ def parse_opts():
         help='Currently support SGD and Adam')
     parser.add_argument(
         '--scheduler',
-        default='cos',
+        default='pleau',
         type=str,
         choices=['step', 'cos', 'pleau'])
     parser.add_argument(
@@ -280,7 +280,7 @@ def parse_opts():
     parser.add_argument('--conv_s', default='mobile3s', choices=['mobile3ss', 'mobile3s'], type=str)
     parser.add_argument('--pretrained_t', action='store_true')
     parser.add_argument('--pretrained_s', action='store_true')
-    parser.add_argument('--name_t', default='ap0.8984', type=str, help='teacher pretrained net')
+    parser.add_argument('--name_t', default='mobilenetv3-large-657e7b3d.pth', type=str, help='teacher pretrained net')
     parser.add_argument('--name_s', default='mobilenetv3-small-c7eb32fe.pth', type=str, help='student pretrained net')
     parser.add_argument('--direct_connect', action='store_true')
     parser.add_argument('--stage1', action='store_true')
