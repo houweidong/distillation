@@ -8,11 +8,11 @@ def log_config(args, logger=None, single=False):
         log = Logger('both', filename=os.path.join(args.log_dir, args.log_file), level='debug', mode='both')
         logger = log.logger.info
 
-    log_names = ['conv_t', 'conv_s', 'pretrained_t', 'pretrained_s', 'name_t', 'name_s', 'DTL', 'distill_epoch', 'max_epoch',
-                 'lr', 'nesterov', 'scheduler']
+    log_names = ['conv_t', 'conv_s', 'pretrained_t', 'pretrained_s', 'name_t', 'name_s', 'DTL', 'stage1', 'load_BN',
+                 'direct_connect', 'distill_epoch', 'max_epoch', 'lr', 'nesterov', 'scheduler']
     pop_list = []
     if single:
-        pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s', 'DTL']
+        pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s', 'DTL', 'stage1', 'direct_connect']
         if args.conv in ['mobile3l']:
             pop_list.extend(['pretrained_s', 'name_s'])
         elif args.conv in ['mobile3s', 'mobile3ss']:

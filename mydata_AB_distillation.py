@@ -168,32 +168,21 @@ criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 
 # Load dataset, net, evaluator, Saver
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-
-if args.dual_load:
-    t_net, s_net, channel_t, channel_s, layer_t, layer_s, index, classifier_ids, BN_ids = \
-        get_pair_model(frm='my', name_t=args.name_t, name_s=args.name_s, pretrained_s=args.pretrained_s)
+t_net, s_net, channel_t, channel_s, layer_t, layer_s, index, filter_list = \
+    get_pair_model(frm='my', name_t=args.name_t, name_s=args.name_s, pretrained_s=args.pretrained_s, load_BN=args.load_BN)
+if args.direct_connect:
     distill_net = AB_distill_Mobilenetl2MobilenetsNoConnect(t_net, s_net, args.batch_size, args.DTL, args.loss_multiplier,
                                                             channel_t, channel_s, layer_t, layer_s, criterion_CE, index)
-    if device == 'cuda':
-        s_net = torch.nn.DataParallel(s_net).cuda()
-        distill_net = torch.nn.DataParallel(distill_net).cuda()
-        cudnn.benchmark = True
-    params = filter(lambda p: id(p) not in classifier_ids + BN_ids, s_net.parameters())
-    optimizer = optim.SGD([{'params': params}], lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
-    optimizer = MultiStepLR(optimizer, milestones=[5, 30], gamma=1)
 else:
-    t_net, channel_t, layer_t = get_model(args.conv_t, frm='my', name_t=args.name_t, pretrained_t=args.pretrained_t)
-    s_net, channel_s, layer_s = get_model(args.conv_s, name_s=args.name_s, pretrained_s=args.pretrained_s)
-
     distill_net = AB_distill_Mobilenetl2Mobilenets(t_net, s_net, args.batch_size, args.DTL, args.loss_multiplier,
-                                                   channel_t, channel_s, layer_t, layer_s, criterion_CE)
-    if device == 'cuda':
-        s_net = torch.nn.DataParallel(s_net).cuda()
-        distill_net = torch.nn.DataParallel(distill_net).cuda()
-        cudnn.benchmark = True
-    optimizer = optim.SGD([{'params': s_net.parameters()}, {'params': distill_net.Connectors.parameters()}],
-                          lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
-    optimizer = MultiStepLR(optimizer, milestones=[5, 30], gamma=1)
+                                                   channel_t, channel_s, layer_t, layer_s, criterion_CE, args.stage1)
+if device == 'cuda':
+    s_net = torch.nn.DataParallel(s_net).cuda()
+    distill_net = torch.nn.DataParallel(distill_net).cuda()
+    cudnn.benchmark = True
+params = filter(lambda p: id(p) not in filter_list, s_net.parameters())
+optimizer = optim.SGD([{'params': params}], lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
+optimizer = MultiStepLR(optimizer, milestones=[5, 30], gamma=1)
 train_evaluator = create_supervised_evaluator(s_net, metrics={
     'multitask': MultiAttributeMetric(metrics, attr_name)}, device=device)
 val_evaluator = create_supervised_evaluator(s_net, metrics={
@@ -205,12 +194,9 @@ for epoch in range(1, int(args.distill_epoch) + 1):
 
 # Cross-entropy training
 distill_net.module.stage1 = False
-if args.dual_load:
-    base_params = filter(lambda p: id(p) not in classifier_ids + BN_ids, s_net.parameters())
-    spci_params = filter(lambda p: id(p) in classifier_ids + BN_ids, s_net.parameters())
-    params_list = [{'params': base_params}, {'params': spci_params, 'lr': args.lr*0.01}]
-else:
-    params_list = s_net.parameters()
+base_params = filter(lambda p: id(p) not in filter_list, s_net.parameters())
+spci_params = filter(lambda p: id(p) in filter_list, s_net.parameters())
+params_list = [{'params': base_params}, {'params': spci_params, 'lr': args.lr*0.01}]
 optimizer = optim.SGD(params_list, lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=True)
 if args.scheduler == 'step':
     optimizer = MultiStepLR(optimizer, milestones=[20, 30], gamma=0.1)

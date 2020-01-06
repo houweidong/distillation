@@ -317,9 +317,11 @@ def get_model(conv, **kwargs):
 
 def get_pair_model(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
-    name_t = kwargs['name_t'] if 'name_t' in kwargs else None
-    name_s = kwargs['name_s'] if 'name_s' in kwargs else None
-    pretrained_s = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else True
+    name_t = kwargs['name_t']
+    name_s = kwargs['name_s']
+    mode = kwargs['mode']
+    load_BN = kwargs['load_BN']
+
     cfgs_t = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -357,27 +359,31 @@ def get_pair_model(**kwargs):
     print('loading model from {}'.format(name_t))
     path_t = os.path.join(root, '.torch/models/', name_t)
     state_dict_t = torch.load(path_t, map_location=device)
-    model_t.load_state_dict(state_dict_t, strict=True)
     print('load completed')
 
     model_s = MobileNetV3(cfgs_s, mode='small')
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
     index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform')
-    if pretrained_s:
-        print('loading model from {}'.format(name_s))
-        path_s = os.path.join(root, '.torch/models/', name_s)
-        state_dict_s = torch.load(path_s, map_location=device)
 
-        print('update last conv and classifier param in state_dict from teacher')
-        for k in list(state_dict_s.keys()):
-            if k.startswith('classifier') or k.startswith('conv.1.fc.'):
-                state_dict_s.pop(k)
-        for k, v in state_dict_t.items():
-            if k.startswith('classifier') or k.startswith('conv.0.1.'):
-                state_dict_s[k] = v
-            state_dict_s['conv.0.0.weight'] = state_dict_t['conv.0.0.weight'][:, 0:cfgs_t[-1][2]//cfgs_s[-1][2]*cfgs_s[-1][2]:cfgs_t[-1][2]//cfgs_s[-1][2], :, :]
-        print('update the last conv classifier param completed')
+    print('loading model from {}'.format(name_s))
+    path_s = os.path.join(root, '.torch/models/', name_s)
+    state_dict_s = torch.load(path_s, map_location=device)
 
+    print('update last conv and classifier param in state_dict from teacher')
+    for k in list(state_dict_s.keys()):
+        # exclude the last conv's SE layer(for reducing params num) and
+        # classifier layer(for performance and align problem)
+        if k.startswith('classifier') or k.startswith('conv.1.fc.'):
+            state_dict_s.pop(k)
+    for k, v in state_dict_t.items():
+        # load classifier parmas and the last conv's BN params
+        if k.startswith('classifier') or k.startswith('conv.0.1.'):
+            state_dict_s[k] = v
+        # load the conv's conv params from teacher because the align problem
+        state_dict_s['conv.0.0.weight'] = state_dict_t['conv.0.0.weight'][:, 0:cfgs_t[-1][2]//cfgs_s[-1][2]*cfgs_s[-1][2]:cfgs_t[-1][2]//cfgs_s[-1][2], :, :]
+    print('update the last conv classifier param completed')
+
+    if load_BN:
         print('update distill BN param in state_dict from teacher')
         for i in range(len(layers_s)):
             if i != 0:
@@ -390,9 +396,12 @@ def get_pair_model(**kwargs):
                 state_dict_s[beta_sn] = beta[i]
         print('update distill BN param completed')
         model_s.load_state_dict(state_dict_s, strict=True)
-        print('load student completed')
+    print('load student completed')
 
-    classifier_ids = list(map(id, model_s.classifier.parameters()))
+    # the last conv's bn layers has strong correlation with the features used to classify, so
+    # this layer is divided to the classification's params
+    last_conv_bn_ids = list(map(id, model_s.conv[0][1].parameters()))
+    classifier_ids = list(map(id, model_s.classifier.parameters())) + last_conv_bn_ids
 
     BN_ids = []
     for i in range(len(layers_s)):
@@ -402,4 +411,12 @@ def get_pair_model(**kwargs):
             BN_id = list(map(id, model_s.features[0][1].parameters()))
         BN_ids.extend(BN_id)
 
-    return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, classifier_ids, BN_ids
+    if load_BN:
+        ids_list = classifier_ids + BN_ids
+    else:
+        ids_list = classifier_ids
+    if mode == 'student':
+        return model_s, classifier_ids
+    else:
+        model_t.load_state_dict(state_dict_t, strict=True)
+        return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, ids_list

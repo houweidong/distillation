@@ -281,8 +281,9 @@ def parse_opts():
     parser.add_argument('--pretrained_s', action='store_true')
     parser.add_argument('--name_t', default='ap0.3095', type=str, help='teacher pretrained net')
     parser.add_argument('--name_s', default='mobilenetv3-small-c7eb32fe.pth', type=str, help='student pretrained net')
-    parser.add_argument('--dual_load', action='store_true')
-
+    parser.add_argument('--direct_connect', action='store_true')
+    parser.add_argument('--stage1', action='store_true')
+    parser.add_argument('--load_BN', action='store_true')
     args = parser.parse_args()
     if args.log_dir:
         args.log_dir = os.path.join(args.result_path, args.log_dir)
