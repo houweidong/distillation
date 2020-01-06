@@ -519,6 +519,7 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
         self.stage1 = True
         # self.criterion_CE = nn.CrossEntropyLoss()
         self.criterion_CE = criterion_CE
+        self.DTL_loss = torch.nn.SmoothL1Loss()
         self.selected_channels = selected_channels
 
     def forward(self, inputs, targets):
@@ -590,9 +591,10 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
 
         # DTL (Distillation in Transfer Learning) loss
         if self.DTL is True:
-            # loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
-            #                                 - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2)) * 200
-            loss_DTL = torch.mean(torch.pow(out_ft - out_fs, 2)) / self.batch_size
+            loss_DTL = torch.mean(torch.pow((out_ft - torch.mean(out_ft, 1, keepdim=True)).detach()
+                                            - (out_fs - torch.mean(out_fs, 1, keepdim=True)), 2))
+            # loss_DTL = torch.mean(torch.pow(out_ft - out_fs, 2))
+            loss_DTL = self.DTL_loss(out_fs, out_ft.detach())
             loss_DTL = loss_DTL.unsqueeze(0).unsqueeze(1)
         else:
             loss_DTL = torch.zeros(1, 1).cuda()

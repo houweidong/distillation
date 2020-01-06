@@ -270,8 +270,8 @@ def parse_opts():
         type=str,
         choices=['pic', 'train_dir', 'camera'],
         help='pic: a single picture,  train_dir: the train set and val set,  camera: for the real time test')
-    parser.add_argument('--AB_loss_multiplier', default=100, type=float, help='multiplier to loss')
-    parser.add_argument('--DTL_loss_multiplier', default=4000, type=float, help='multiplier to loss')
+    parser.add_argument('--AB_loss_multiplier', default=4000, type=float, help='multiplier to loss')
+    parser.add_argument('--DTL_loss_multiplier', default=200, type=float, help='multiplier to loss')
     parser.add_argument('--DTL', action='store_true', help='DTL (Distillation in Transfer Learning) method')
     parser.add_argument('--distill_epoch', default=20, type=int, help='epoch for distillation')
     parser.add_argument('--max_epoch', default=160, type=int, help='epoch for all')
@@ -280,7 +280,7 @@ def parse_opts():
     parser.add_argument('--conv_s', default='mobile3s', choices=['mobile3ss', 'mobile3s'], type=str)
     parser.add_argument('--pretrained_t', action='store_true')
     parser.add_argument('--pretrained_s', action='store_true')
-    parser.add_argument('--name_t', default='ap0.3095', type=str, help='teacher pretrained net')
+    parser.add_argument('--name_t', default='ap0.8984', type=str, help='teacher pretrained net')
     parser.add_argument('--name_s', default='mobilenetv3-small-c7eb32fe.pth', type=str, help='student pretrained net')
     parser.add_argument('--direct_connect', action='store_true')
     parser.add_argument('--stage1', action='store_true')
