@@ -5,4 +5,5 @@ import torch
 import numpy as np
 
 
-print(type(math.ceil(0.5)))
+a = [5]
+print(a)

@@ -332,7 +332,6 @@ def get_pair_model(**kwargs):
     mode = kwargs['mode']
     load_BN = kwargs['load_BN']
     logger = kwargs['logger']
-    bucket = kwargs['bucket']
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -375,7 +374,7 @@ def get_pair_model(**kwargs):
 
     model_s = MobileNetV3(cfgs_s, mode='small')
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
-    index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform', bucket)
+    index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform')
 
     logger('loading model from {}'.format(name_s))
     path_s = os.path.join(root, '.torch/models/', name_s)

@@ -286,8 +286,6 @@ def parse_opts():
     parser.add_argument('--stage1', action='store_true')
     parser.add_argument('--load_BN', action='store_true')
     parser.add_argument('--DTL_loss', default='l1', choices=['l1', 'l2', 'l2_mean'], type=str)
-    parser.add_argument('--bucket', default=1, type=int)
-
     args = parser.parse_args()
     if args.log_dir:
         args.log_dir = os.path.join(args.result_path, args.log_dir)
