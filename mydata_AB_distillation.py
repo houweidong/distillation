@@ -187,8 +187,10 @@ if device == 'cuda':
     s_net = torch.nn.DataParallel(s_net).cuda()
     distill_net = torch.nn.DataParallel(distill_net).cuda()
     cudnn.benchmark = True
-params = filter(lambda p: id(p) not in filter_list, s_net.parameters())
-optimizer = optim.SGD([{'params': params}], lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
+params_list = [{'params': filter(lambda p: id(p) not in filter_list, s_net.parameters())}]
+if args.stage1 and not args.direct_connect:
+    params_list.append({'params': distill_net.Connectors.parameters()})
+optimizer = optim.SGD(params_list, lr=0.01, nesterov=True, momentum=args.momentum, weight_decay=args.weight_decay)
 optimizer = MultiStepLR(optimizer, milestones=[5, 30], gamma=1)
 train_evaluator = create_supervised_evaluator(s_net, metrics={
     'multitask': MultiAttributeMetric(metrics, attr_name)}, device=device)

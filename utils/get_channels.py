@@ -57,8 +57,8 @@ def select_channel_ac_mean_var(alpha, beta, channel_nums, mode, bucket=1):
     :return index: index of selected channels, whose length is channel_nums
     """
     assert mode in ['uniform', 'high-mean', 'high-var', 'high-all']
-    alpha = alpha.cpu().numpy()
-    beta = beta.cpu().numpy()
+    # alpha = alpha.cpu().numpy()
+    # beta = beta.cpu().numpy()
     # alpha_bin = np.histogram(alpha, 10)
     # beta_bin = np.histogram(beta, 10)
     # max_pair = np.array([np.max(alpha), np.max(beta)])
