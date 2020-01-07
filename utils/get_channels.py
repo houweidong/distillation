@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from matplotlib import pyplot as plt
+import math
 
 # [4, 5, 3, 0, 6, 13, 15, 8, 8, 2] [-0.56730014, -0.40980357, -0.252307, -0.09481044, 0.06268612, 0.22018269, 0.37767926, 0.5351758, 0.6926724, 0.85016894, 1.0076655]
 # [2, 0, 4, 3, 9, 7, 11, 11, 10, 7] [-0.5200588, -0.38907784, -0.25809687, -0.1271159, 0.0038650632, 0.13484603, 0.265827, 0.39680797, 0.52778894, 0.6587699, 0.7897509]
@@ -17,6 +18,20 @@ from matplotlib import pyplot as plt
 # [19, 7, 18, 11, 15, 98, 225, 198, 70, 11] [0.05439103, 0.1345677, 0.21474436, 0.294921, 0.3750977, 0.45527434, 0.535451, 0.61562765, 0.69580436, 0.775981, 0.85615766]
 # [5, 45, 178, 205, 80, 42, 27, 20, 18, 52] [-1.2577643, -1.1277652, -0.997766, -0.8677669, -0.73776776, -0.6077686, -0.47776946, -0.3477703, -0.21777117, -0.08777203, 0.042227123]
 # [ 0.05439103 -1.2577643 ] [0.85615766 0.04222712]
+
+
+def bisection(n, m, bucket):
+    start, end = bucket, n
+    remain = m - (math.ceil(m/bucket) - 1)*bucket
+    while start <= end:
+        mid = (start + end) // 2
+        if (mid * (math.ceil(m/bucket) - 1) + remain) < n:
+            start = mid + 1
+        elif (mid * (math.ceil(m/bucket) - 1) + remain) > n:
+            end = mid - 1
+        else:
+            return mid
+    return start - 1
 
 
 def distance(a, max_pair, mode):
@@ -74,8 +89,20 @@ def select_channel_ac_mean_var(alpha, beta, channel_nums, mode, bucket=1):
         # index = np.argsort(dist_pos)[-channel_nums:]
     else:
         length = len(alpha)
-        step = length // channel_nums
-        index = np.arange(0, step*channel_nums, step=step)
+        indexs = []
+        step = bisection(length, channel_nums, bucket)
+        limit = math.ceil(channel_nums/bucket) - 1
+        for i in range(limit):
+            temp_index = np.arange(i*step, i*step+bucket)
+            indexs.append(temp_index)
+        remain = channel_nums - bucket*limit
+        indexs.append(np.arange(limit*step, limit*step+remain))
+        index = np.concatenate(indexs, axis=0)
+        # step = length // num
+        # for i in range(bucket):
+        #     temp_index.append(np.arange(0, step*num_single, step=step)[:, np.newaxis])
+        # temp_index = np.concatenate(temp_index, axis=1)
+        # index = np.concatenate(temp_index, axis=0)
     return list(index)
 
 
@@ -85,7 +112,7 @@ def get_name_of_alpha_and_beta(layer):
     return name_alpha, name_beta
 
 
-def get_channels(model_dict, layers_t, channels_s, mode):
+def get_channels(model_dict, layers_t, channels_s, mode, bucket):
     color = {0: 'green', 1: 'red', 2: 'blue', 3: 'skyblue'}
     indexs, alphas, betas = [], [], []
     for i, ly in enumerate(layers_t):
@@ -95,7 +122,7 @@ def get_channels(model_dict, layers_t, channels_s, mode):
         # plt.plot(x_axit, beta.cpu().numpy(), color=color[i], label=str(i))
         # plt.show()
         # plt.plot(x_axit, beta, color='red', label='beta')
-        ind = select_channel_ac_mean_var(alpha, beta, channels_s[i], mode)
+        ind = select_channel_ac_mean_var(alpha, beta, channels_s[i], mode, bucket)
         alphas.append(alpha[ind])
         betas.append(beta[ind])
         indexs.append(ind)

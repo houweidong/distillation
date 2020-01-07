@@ -48,28 +48,6 @@ def train(net, epoch):
             logger('Loss: %.3f[%d/%d] ' % (loss.item(), batch_idx, bt_sum))
 
 
-# Test
-def test(net, epoch):
-    net.eval()
-    # data_list = [trainloader, testloader]
-    # name_list = ['train', 'val']
-    # eval_list = [train_evaluator, val_evaluator]
-    data_list = [testloader]
-    name_list = ['val']
-    eval_list = [val_evaluator]
-
-    for data, name, evl in zip(data_list, name_list, eval_list):
-        evl.run(data)
-        metrics_info = evl.state.metrics["multitask"]
-        # logger(name + ": Validation Results - Epoch: {}".format(epoch))
-        # print_summar_table(logger, attr_name, metrics_info['logger'])
-    if args.scheduler == 'pleau':
-        optimizer.step(metrics_info['logger']['attr']['ap'][-1])
-    else:
-        optimizer.step()
-    return metrics_info
-
-
 def test(net, epoch):
     net.eval()
     data_list = [trainloader, testloader]
