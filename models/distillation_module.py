@@ -364,6 +364,7 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
                                         - (source - torch.mean(source, 1, keepdim=True)), 2))
 
     DTL_dict = {'l1': torch.nn.SmoothL1Loss(), 'l2': torch.nn.MSELoss(), 'l2_mean': l2_mean}
+
     def __init__(self, t_net, s_net, batch_size, DTL, AB_loss_multiplier, DTL_loss_multiplier, channel_t, channel_s,
                  layer_t, layer_s, criterion_CE, stage1, DTL_loss):
         super(AB_distill_Mobilenetl2Mobilenets, self).__init__()

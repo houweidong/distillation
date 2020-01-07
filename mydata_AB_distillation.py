@@ -175,8 +175,8 @@ criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 # Load dataset, net, evaluator, Saver
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 t_net, s_net, channel_t, channel_s, layer_t, layer_s, index, filter_list = \
-    get_pair_model(frm='my', name_t=args.name_t, name_s=args.name_s, pretrained_s=args.pretrained_s,
-                   load_BN=args.load_BN, logger=logger, bucket=args.bucket, size=args.size)
+    get_pair_model(args.size, frm='my', name_t=args.name_t, name_s=args.name_s,
+                   load_BN=args.load_BN, logger=logger, bucket=args.bucket)
 if args.direct_connect:
     distill_net = AB_distill_Mobilenetl2MobilenetsNoConnect(t_net, s_net, args.batch_size, args.DTL,
         args.AB_loss_multiplier, args.DTL_loss_multiplier, channel_t, channel_s, layer_t, layer_s, criterion_CE, index, args.DTL_loss)

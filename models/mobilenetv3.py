@@ -329,7 +329,7 @@ def get_model(conv, **kwargs):
     return model[conv](**kwargs)
 
 
-def get_pair_model(**kwargs):
+def get_pair_model_s(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
     name_t = kwargs['name_t']
     name_s = kwargs['name_s']
@@ -337,9 +337,6 @@ def get_pair_model(**kwargs):
     load_BN = kwargs['load_BN']
     logger = kwargs['logger']
     bucket = kwargs['bucket']
-    pretrained_s = kwargs['pretrained_s']
-    size = kwargs['size']
-
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -359,7 +356,7 @@ def get_pair_model(**kwargs):
         [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
         [5, 960, 160, 1, 1, 1]   # 15
     ]
-    cfgs_small = [
+    cfgs_s = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
         [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
@@ -373,20 +370,6 @@ def get_pair_model(**kwargs):
         [5, 576,  96, 1, 1, 1],  # 10
         [5, 576,  96, 1, 1, 1],  # 11
     ]
-    cfgs_ssmall = [
-        # k, t, c, SE, NL, s
-        [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
-        [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
-        [3,  88,  24, 0, 0, 1],  # 3
-        [5,  96,  40, 1, 1, 2],  # 4                    layer4  96
-        [5, 240,  40, 1, 1, 1],  # 5
-        [-1, -1, -1, -1, -1, -1],
-        [-1, -1, -1, -1, -1, -1],
-        [-1, -1, -1, -1, -1, -1],
-        [5, 288,  96, 1, 1, 2],  # 9                    layer9  288
-        [5, 576,  96, 1, 1, 1],  # 10
-    ]
-    cfgs_s = cfgs_small if size == 's' else cfgs_ssmall
     model_t = MobileNetV3(cfgs_t, mode='large')
     channels_t, layers_t = get_channels_for_distill(cfgs_t)
     logger('\nloading model from {}'.format(name_t))
@@ -398,13 +381,9 @@ def get_pair_model(**kwargs):
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
     index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform', bucket)
 
-    if pretrained_s:
-        logger('loading model from {}'.format(name_s))
-        path_s = os.path.join(root, '.torch/models/', name_s)
-        state_dict_s = torch.load(path_s, map_location=device)
-    else:
-        logger('loading a part of params from teacher, do not use pretrained model')
-        state_dict_s = OrderedDict()
+    logger('loading model from {}'.format(name_s))
+    path_s = os.path.join(root, '.torch/models/', name_s)
+    state_dict_s = torch.load(path_s, map_location=device)
 
     logger(' update last conv and classifier param in state_dict from teacher')
     for k in list(state_dict_s.keys()):
@@ -434,10 +413,10 @@ def get_pair_model(**kwargs):
         logger(' update distill BN param completed')
 
         # deal the mismatch in features9
-        if size == 'ss':
-            index = [0, 2, 4, 6, 8, 10, 12, 14] + list(range(16, 48))
-            state_dict_s['features.9.conv.0.weight'] = state_dict_s['features.9.conv.0.weight'][:, index, :, :]
-        model_s.load_state_dict(state_dict_s, False)
+        # if size == 'ss':
+        #     index = [0, 2, 4, 6, 8, 10, 12, 14] + list(range(16, 48))
+        #     state_dict_s['features.9.conv.0.weight'] = state_dict_s['features.9.conv.0.weight'][:, index, :, :]
+    model_s.load_state_dict(state_dict_s, True)
     logger('load student completed')
 
     # the last conv's bn layers has strong correlation with the features used to classify, so
@@ -459,3 +438,91 @@ def get_pair_model(**kwargs):
     # if mode == 'student':
     #     return model_s, classifier_ids
     # else:
+
+
+def get_pair_model_ss(**kwargs):
+    device = kwargs['device'] if 'device' in kwargs else 'cuda'
+    name_t = kwargs['name_t']
+    name_s = kwargs['name_s']
+    # mode = kwargs['mode']
+    load_BN = kwargs['load_BN']
+    logger = kwargs['logger']
+    bucket = kwargs['bucket']
+    freeze_backbone = ['freeze_backbone']
+
+    cfgs_t = [
+        # k, t, c, SE, NL, s
+        [3,  16,  16, 0, 0, 1],  # 1
+        [3,  64,  24, 0, 0, 2],  # 2                    layer2  64
+        [3,  72,  24, 0, 0, 1],  # 3
+        [5,  72,  40, 1, 0, 2],  # 4                    layer4  72
+        [5, 120,  40, 1, 0, 1],  # 5
+        [5, 120,  40, 1, 0, 1],  # 6
+        [3, 240,  80, 0, 1, 2],  # 7                    layer7  240
+        [3, 200,  80, 0, 1, 1],  # 8
+        [3, 184,  80, 0, 1, 1],  # 9
+        [3, 184,  80, 0, 1, 1],  # 10
+        [3, 480, 112, 1, 1, 1],  # 11
+        [3, 672, 112, 1, 1, 1],  # 12
+        [5, 672, 160, 1, 1, 1],  # 13
+        [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
+        [5, 960, 160, 1, 1, 1]   # 15
+    ]
+    cfgs_s = [
+        # k, t, c, SE, NL, s
+        [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
+        [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
+        [3,  88,  24, 0, 0, 1],  # 3
+        [5,  96,  40, 1, 1, 2],  # 4                    layer4  96
+        [5, 240,  40, 1, 1, 1],  # 5
+        [-1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1],
+        [5, 288,  96, 1, 1, 2],  # 9                    layer9  288
+        [-1, -1, -1, -1, -1, -1],
+        [5, 576,  96, 1, 1, 1],  # 11
+    ]
+    model_t = MobileNetV3(cfgs_t, mode='large')
+    channels_t, layers_t = get_channels_for_distill(cfgs_t)
+    logger('\nloading model from {}'.format(name_t))
+    path_t = os.path.join(root, '.torch/models/', name_t)
+    state_dict_t = torch.load(path_t, map_location=device)
+    logger('load completed')
+
+    model_s = MobileNetV3(cfgs_s, mode='small')
+    channels_s, layers_s = get_channels_for_distill(cfgs_s)
+    index, _, _ = get_channels(state_dict_t, layers_t, channels_s, 'uniform', bucket)
+
+    logger('loading model from {}'.format(name_s))
+    path_s = os.path.join(root, '.torch/models/', name_s)
+    state_dict_s = torch.load(path_s, map_location=device)
+
+    # deal with the mismatch in features9
+    index = [0, 2, 4, 6, 8, 10, 12, 14] + list(range(16, 48))
+    state_dict_s['features.9.conv.0.weight'] = state_dict_s['features.9.conv.0.weight'][:, index, :, :]
+
+    model_s.load_state_dict(state_dict_s, False)
+    logger('load completed')
+
+    last_conv_ids = list(map(id, model_s.conv.parameters()))
+    classifier_ids = list(map(id, model_s.classifier.parameters())) + last_conv_ids
+    BN_ids = []
+    for i in range(len(layers_s)):
+        if i != 0:
+            BN_id = list(map(id, model_s.features[layers_s[i]].conv[1].parameters()))
+        else:
+            BN_id = list(map(id, model_s.features[0][1].parameters()))
+        BN_ids.extend(BN_id)
+    backbone_ids = []
+    for i in range(5):
+        backbone_id = list(map(id, model_s.features[i].parameters()))
+        backbone_ids.extend(backbone_id)
+    ids_list = classifier_ids if not load_BN else classifier_ids + BN_ids
+    ids_list = ids_list if not freeze_backbone else ids_list + backbone_ids
+    model_t.load_state_dict(state_dict_t, strict=True)
+    return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, ids_list
+
+
+def get_pair_model(size, **kwargs):
+    model = {'s': get_pair_model_s, 'ss': get_pair_model_ss}
+    return model[size](**kwargs)
