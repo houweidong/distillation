@@ -424,7 +424,7 @@ def get_pair_model(**kwargs):
                 state_dict_s[alpha_sn] = alpha[i]
                 state_dict_s[beta_sn] = beta[i]
         logger(' update distill BN param completed')
-        model_s.load_state_dict(state_dict_s, strict=True)
+        model_s.load_state_dict(state_dict_s, True if pretrained_s else False)
     logger('load student completed')
 
     # the last conv's bn layers has strong correlation with the features used to classify, so
