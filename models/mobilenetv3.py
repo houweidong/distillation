@@ -10,6 +10,7 @@ import math
 import torch
 import os
 from utils.get_channels import get_channels, get_name_of_alpha_and_beta
+from collections import OrderedDict
 
 __all__ = ['get_model', 'get_pair_model', 'MobileNetV3']
 root = os.environ['HOME']
@@ -329,10 +330,11 @@ def get_pair_model(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
     name_t = kwargs['name_t']
     name_s = kwargs['name_s']
-    mode = kwargs['mode']
+    # mode = kwargs['mode']
     load_BN = kwargs['load_BN']
     logger = kwargs['logger']
     bucket = kwargs['bucket']
+    pretrained_s = kwargs['pretrained_s']
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -366,6 +368,17 @@ def get_pair_model(**kwargs):
         [5, 576,  96, 1, 1, 1],  # 10
         [5, 576,  96, 1, 1, 1],  # 11
     ]
+    cfgs_ss = [
+        # k, t, c, SE, NL, s
+        [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
+        [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
+        [3,  88,  24, 0, 0, 1],  # 3
+        [5,  96,  40, 1, 1, 2],  # 4                    layer4  96
+        [5, 240,  40, 1, 1, 1],  # 5
+        [5, 144,  48, 1, 1, 1],  # 8
+        [5, 288,  96, 1, 1, 2],  # 9                    layer9  288
+        [5, 576,  96, 1, 1, 1],  # 11
+    ]
     model_t = MobileNetV3(cfgs_t, mode='large')
     channels_t, layers_t = get_channels_for_distill(cfgs_t)
     logger('\nloading model from {}'.format(name_t))
@@ -377,9 +390,13 @@ def get_pair_model(**kwargs):
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
     index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform', bucket)
 
-    logger('loading model from {}'.format(name_s))
-    path_s = os.path.join(root, '.torch/models/', name_s)
-    state_dict_s = torch.load(path_s, map_location=device)
+    if pretrained_s:
+        logger('loading model from {}'.format(name_s))
+        path_s = os.path.join(root, '.torch/models/', name_s)
+        state_dict_s = torch.load(path_s, map_location=device)
+    else:
+        logger('loading a part of params from teacher, do not use pretrained model')
+        state_dict_s = OrderedDict()
 
     logger(' update last conv and classifier param in state_dict from teacher')
     for k in list(state_dict_s.keys()):
@@ -423,12 +440,9 @@ def get_pair_model(**kwargs):
             BN_id = list(map(id, model_s.features[0][1].parameters()))
         BN_ids.extend(BN_id)
 
-    if load_BN:
-        ids_list = classifier_ids + BN_ids
-    else:
-        ids_list = classifier_ids
-    if mode == 'student':
-        return model_s, classifier_ids
-    else:
-        model_t.load_state_dict(state_dict_t, strict=True)
-        return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, ids_list
+    ids_list = classifier_ids if not load_BN else classifier_ids + BN_ids
+    model_t.load_state_dict(state_dict_t, strict=True)
+    return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, ids_list
+    # if mode == 'student':
+    #     return model_s, classifier_ids
+    # else:

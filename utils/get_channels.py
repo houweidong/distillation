@@ -112,20 +112,32 @@ def get_name_of_alpha_and_beta(layer):
     return name_alpha, name_beta
 
 
-def get_channels(model_dict, layers_t, channels_s, mode, bucket):
-    color = {0: 'green', 1: 'red', 2: 'blue', 3: 'skyblue'}
+def get_channels(model_dict, layers_t, channels_s, mode, bucket, test=False):
     indexs, alphas, betas = [], [], []
+
+    plt.figure(figsize=(10, 10))
+
     for i, ly in enumerate(layers_t):
         alpha_n, beta_n = get_name_of_alpha_and_beta(layers_t[i])
         alpha, beta = model_dict[alpha_n], model_dict[beta_n]
-        # x_axit = np.arange(len(alpha.cpu().numpy()))
-        # plt.plot(x_axit, beta.cpu().numpy(), color=color[i], label=str(i))
-        # plt.show()
-        # plt.plot(x_axit, beta, color='red', label='beta')
+        x_axit = np.arange(len(alpha.cpu().numpy()))
+
+        plt.subplot(2, len(layers_t), i+1)
+        plt.plot(x_axit, alpha.cpu().numpy(), color='green', label=str(i))
+        plt.xlabel("alpha: {} layer".format(i+1))
+
+        plt.subplot(2, len(layers_t), len(layers_t) + i+1)
+        plt.plot(x_axit, beta.cpu().numpy(), color='red', label=str(i))
+        plt.xlabel("beta: {} layer".format(i + 1))
+
         ind = select_channel_ac_mean_var(alpha, beta, channels_s[i], mode, bucket)
         alphas.append(alpha[ind])
         betas.append(beta[ind])
         indexs.append(ind)
+
+    if test:
+        plt.show()
+
     return indexs, alphas, betas
 
 
