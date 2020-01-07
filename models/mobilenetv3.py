@@ -145,9 +145,12 @@ class MobileNetV3(nn.Module):
         # building inverted residual blocks
         block = InvertedResidual
         for k, exp_size, c, use_se, use_hs, s in self.cfgs:
-            output_channel = _make_divisible(c * width_mult, 8)
-            layers.append(block(input_channel, exp_size, output_channel, k, s, use_se, use_hs))
-            input_channel = output_channel
+            if k != -1:
+                output_channel = _make_divisible(c * width_mult, 8)
+                layers.append(block(input_channel, exp_size, output_channel, k, s, use_se, use_hs))
+                input_channel = output_channel
+            else:
+                layers.append(nn.Sequential())
         self.features = nn.Sequential(*layers)
         # building last several layers
         self.conv = nn.Sequential(
@@ -335,6 +338,8 @@ def get_pair_model(**kwargs):
     logger = kwargs['logger']
     bucket = kwargs['bucket']
     pretrained_s = kwargs['pretrained_s']
+    size = kwargs['size']
+
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -354,7 +359,7 @@ def get_pair_model(**kwargs):
         [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
         [5, 960, 160, 1, 1, 1]   # 15
     ]
-    cfgs_s = [
+    cfgs_small = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
         [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
@@ -368,17 +373,20 @@ def get_pair_model(**kwargs):
         [5, 576,  96, 1, 1, 1],  # 10
         [5, 576,  96, 1, 1, 1],  # 11
     ]
-    cfgs_ss = [
+    cfgs_ssmall = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
         [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
         [3,  88,  24, 0, 0, 1],  # 3
         [5,  96,  40, 1, 1, 2],  # 4                    layer4  96
         [5, 240,  40, 1, 1, 1],  # 5
-        [5, 144,  48, 1, 1, 1],  # 8
+        [-1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1],
+        [-1, -1, -1, -1, -1, -1],
         [5, 288,  96, 1, 1, 2],  # 9                    layer9  288
-        [5, 576,  96, 1, 1, 1],  # 11
+        [5, 576,  96, 1, 1, 1],  # 10
     ]
+    cfgs_s = cfgs_small if size == 's' else cfgs_ssmall
     model_t = MobileNetV3(cfgs_t, mode='large')
     channels_t, layers_t = get_channels_for_distill(cfgs_t)
     logger('\nloading model from {}'.format(name_t))
@@ -424,7 +432,12 @@ def get_pair_model(**kwargs):
                 state_dict_s[alpha_sn] = alpha[i]
                 state_dict_s[beta_sn] = beta[i]
         logger(' update distill BN param completed')
-        model_s.load_state_dict(state_dict_s, True if pretrained_s else False)
+
+        # deal the mismatch in features9
+        if size == 'ss':
+            index = [0, 2, 4, 6, 8, 10, 12, 14] + list(range(16, 48))
+            state_dict_s['features.9.conv.0.weight'] = state_dict_s['features.9.conv.0.weight'][:, index, :, :]
+        model_s.load_state_dict(state_dict_s, False)
     logger('load student completed')
 
     # the last conv's bn layers has strong correlation with the features used to classify, so
