@@ -5,4 +5,3 @@ import torch
 import numpy as np
 
 
-print('loading model from {}'.format(None))

@@ -10,7 +10,7 @@ def log_config(args, logger=None, single=False):
 
     log_names = ['conv_t', 'conv_s', 'pretrained_t', 'pretrained_s', 'name_t', 'name_s', 'DTL', 'stage1', 'load_BN',
                  'direct_connect', 'AB_loss_multiplier', 'DTL_loss_multiplier', 'distill_epoch', 'max_epoch',
-                 'lr', 'nesterov', 'scheduler', 'bucket', 'size', 'freeze_backbone']
+                 'lr', 'nesterov', 'scheduler', 'bucket', 'size', 'freeze_backbone', 'plug_in']
     pop_list = []
     if single:
         pop_list = ['distill_epoch', 'max_epoch', 'conv_t', 'conv_s', 'DTL', 'stage1', 'direct_connect',

@@ -2,6 +2,8 @@ import torch
 import numpy as np
 from matplotlib import pyplot as plt
 import math
+import os
+import models
 
 # [4, 5, 3, 0, 6, 13, 15, 8, 8, 2] [-0.56730014, -0.40980357, -0.252307, -0.09481044, 0.06268612, 0.22018269, 0.37767926, 0.5351758, 0.6926724, 0.85016894, 1.0076655]
 # [2, 0, 4, 3, 9, 7, 11, 11, 10, 7] [-0.5200588, -0.38907784, -0.25809687, -0.1271159, 0.0038650632, 0.13484603, 0.265827, 0.39680797, 0.52778894, 0.6587699, 0.7897509]
@@ -141,6 +143,46 @@ def get_channels(model_dict, layers_t, channels_s, mode, bucket, test=False):
     return indexs, alphas, betas
 
 
+def plot_alpha_beta(model_dict, layers):
+
+    plt.figure(figsize=(10, 10))
+
+    for i, ly in enumerate(layers):
+        alpha_n, beta_n = get_name_of_alpha_and_beta(layers[i])
+        alpha, beta = model_dict[alpha_n], model_dict[beta_n]
+        x_axit = np.arange(len(alpha.cpu().numpy()))
+
+        plt.subplot(2, len(layers), i+1)
+        plt.plot(x_axit, alpha.cpu().numpy(), color='green', label=str(i))
+        plt.xlabel("alpha: {} layer".format(i+1))
+
+        plt.subplot(2, len(layers), len(layers) + i+1)
+        plt.plot(x_axit, beta.cpu().numpy(), color='red', label=str(i))
+        plt.xlabel("beta: {} layer".format(i + 1))
+
+
+def plot_alpha_beta_sample(model_dict, layers_t, channels_s, bucket):
+
+    plt.figure(figsize=(10, 10))
+
+    for i, ly in enumerate(layers_t):
+        alpha_n, beta_n = get_name_of_alpha_and_beta(layers_t[i])
+        alpha, beta = model_dict[alpha_n], model_dict[beta_n]
+
+        ind = select_channel_ac_mean_var(alpha, beta, channels_s[i], 'uniform', bucket)
+        alpha = alpha[ind]
+        beta = beta[ind]
+
+        x_axit = np.arange(len(alpha.cpu().numpy()))
+        plt.subplot(2, len(layers_t), i+1)
+        plt.plot(x_axit, alpha.cpu().numpy(), color='green', label=str(i))
+        plt.xlabel("alpha: {} layer".format(i+1))
+
+        plt.subplot(2, len(layers_t), len(layers_t) + i+1)
+        plt.plot(x_axit, beta.cpu().numpy(), color='red', label=str(i))
+        plt.xlabel("beta: {} layer".format(i + 1))
+
+
 # path = '/root/.torch/models/ap0.8972'
 # model = torch.load(path)
 # cfgs_s = [
@@ -178,3 +220,49 @@ def get_channels(model_dict, layers_t, channels_s, mode, bucket, test=False):
 # cs, ls = get_channels_for_distill(cfgs_s)
 # ct, lt = get_channels_for_distill(cfgs_t)
 # ind, al, beta = get_channels(model, lt, cs)
+
+if __name__ == '__main__':
+    root = os.environ['HOME']
+    cfgs_s = [
+        # k, t, c, SE, NL, s
+        [3, 16, 16, 1, 0, 2],  # 1                    layer1  16
+        [3, 72, 24, 0, 0, 2],  # 2                    layer2  72
+        [3, 88, 24, 0, 0, 1],  # 3
+        [5, 96, 40, 1, 1, 2],  # 4                    layer4  96
+        [5, 240, 40, 1, 1, 1],  # 5
+        [5, 240, 40, 1, 1, 1],  # 6
+        [5, 120, 48, 1, 1, 1],  # 7
+        [5, 144, 48, 1, 1, 1],  # 8
+        [5, 288, 96, 1, 1, 2],  # 9                    layer9  288
+        [5, 576, 96, 1, 1, 1],  # 10
+        [5, 576, 96, 1, 1, 1],  # 11
+    ]
+    cfgs_t = [
+        # k, t, c, SE, NL, s
+        [3, 16, 16, 0, 0, 1],  # 1
+        [3, 64, 24, 0, 0, 2],  # 2                    layer2  64
+        [3, 72, 24, 0, 0, 1],  # 3
+        [5, 72, 40, 1, 0, 2],  # 4                    layer4  72
+        [5, 120, 40, 1, 0, 1],  # 5
+        [5, 120, 40, 1, 0, 1],  # 6
+        [3, 240, 80, 0, 1, 2],  # 7                    layer7  240
+        [3, 200, 80, 0, 1, 1],  # 8
+        [3, 184, 80, 0, 1, 1],  # 9
+        [3, 184, 80, 0, 1, 1],  # 10
+        [3, 480, 112, 1, 1, 1],  # 11
+        [3, 672, 112, 1, 1, 1],  # 12
+        [5, 672, 160, 1, 1, 1],  # 13
+        [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
+        [5, 960, 160, 1, 1, 1]]  # 15
+
+    name_t, name_s = 'mobilenetv3-large-657e7b3d.pth', 'ap0.8969'
+    path_t = os.path.join(root, '.torch/models/', name_t)
+    path_s = os.path.join(root, '.torch/models/', name_s)
+    state_dict_t = torch.load(path_t)
+    state_dict_s = torch.load(path_s)
+    _, layers_t = models.get_channels_for_distill(cfgs_t)
+    channels_s, layers_s = models.get_channels_for_distill(cfgs_s)
+    plot_alpha_beta(state_dict_t, layers_t)
+    plot_alpha_beta(state_dict_s, layers_s)
+    plot_alpha_beta_sample(state_dict_t, layers_t, channels_s, 1)
+    plt.show()

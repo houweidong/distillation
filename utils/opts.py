@@ -289,6 +289,7 @@ def parse_opts():
     parser.add_argument('--bucket', default=1, type=int)
     parser.add_argument('--size', default='s', choices=['s', 'ss'], type=str)
     parser.add_argument('--freeze_backbone', action='store_true')
+    parser.add_argument('--plug_in', default='se', choices=['se', 'at', 'atse'], type=str)
     args = parser.parse_args()
     if args.log_dir:
         args.log_dir = os.path.join(args.result_path, args.log_dir)

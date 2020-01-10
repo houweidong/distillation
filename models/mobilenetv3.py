@@ -12,7 +12,7 @@ import os
 from utils.get_channels import get_channels, get_name_of_alpha_and_beta
 from collections import OrderedDict
 
-__all__ = ['get_model', 'get_pair_model', 'MobileNetV3']
+__all__ = ['get_model', 'get_pair_model', 'MobileNetV3', 'get_channels_for_distill']
 root = os.environ['HOME']
 
 
@@ -70,6 +70,50 @@ class SELayer(nn.Module):
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
         return x * y
+
+
+class ATLayer(nn.Module):
+    def __init__(self, resolution, reduction=4):
+        super(ATLayer, self).__init__()
+        self.fc1 = nn.Sequential(
+                nn.Linear(resolution, resolution // reduction),
+                nn.ReLU(inplace=True),
+                nn.Linear(resolution // reduction, resolution),
+                h_sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, w, h = x.size()
+        y = torch.mean(x, dim=1).view(b, w*h)
+        y = self.fc1(y).view(b, 1, w, h)
+        return x * y
+
+
+class ATSELayer(nn.Module):
+    def __init__(self, channel, resolution, reduction=4):
+        super(ATSELayer, self).__init__()
+        self.fc = nn.Sequential(
+                nn.Linear(channel, channel // reduction),
+                nn.ReLU(inplace=True),
+                nn.Linear(channel // reduction, channel),
+                h_sigmoid()
+        )
+
+        self.fc1 = nn.Sequential(
+                nn.Linear(resolution*resolution, resolution*resolution // reduction),
+                nn.ReLU(inplace=True),
+                nn.Linear(resolution*resolution // reduction, resolution*resolution),
+                h_sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, w, h = x.size()
+        y = self.avg_pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+
+        z = torch.mean(x, dim=1).view(b, w*h)
+        z = self.fc1(z).view(b, 1, w, h)
+        return x * y * z
 
 
 def conv_3x3_bn(inp, oup, stride):
@@ -223,6 +267,8 @@ def mobile3l(**kwargs):
     pretrained = kwargs['pretrained_t'] if 'pretrained_t' in kwargs else False
     name_t = kwargs['name_t'] if 'name_t' in kwargs else None
     logger = kwargs['logger'] if 'logger' in kwargs else print
+    plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
+    plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -235,11 +281,11 @@ def mobile3l(**kwargs):
         [3, 200,  80, 0, 1, 1],  # 8
         [3, 184,  80, 0, 1, 1],  # 9
         [3, 184,  80, 0, 1, 1],  # 10
-        [3, 480, 112, 1, 1, 1],  # 11
-        [3, 672, 112, 1, 1, 1],  # 12
-        [5, 672, 160, 1, 1, 1],  # 13
-        [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
-        [5, 960, 160, 1, 1, 1]   # 15
+        [3, 480, 112, plug_in_dict[plug_in], 1, 1],  # 11
+        [3, 672, 112, plug_in_dict[plug_in], 1, 1],  # 12
+        [5, 672, 160, plug_in_dict[plug_in], 1, 1],  # 13
+        [5, 672, 160, plug_in_dict[plug_in], 1, 2],  # 14                   layer14 672
+        [5, 960, 160, plug_in_dict[plug_in], 1, 1]   # 15
     ]
     model = MobileNetV3(cfgs, mode='large')
 
@@ -264,19 +310,21 @@ def mobile3s(**kwargs):
     pretrained = kwargs['pretrained_s'] if 'pretrained_s' in kwargs else False
     name_s = kwargs['name_s'] if 'name_s' in kwargs else None
     logger = kwargs['logger'] if 'logger' in kwargs else print
+    plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
+    plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     cfgs = [
         # k, t, c, SE, NL, s
-        [3,  16,  16, 1, 0, 2],  # 1                    layer1  16
-        [3,  72,  24, 0, 0, 2],  # 2                    layer2  72
+        [3,  16,  16, 1, 0, 2],  # 1                                        layer1  16
+        [3,  72,  24, 0, 0, 2],  # 2                                        layer2  72
         [3,  88,  24, 0, 0, 1],  # 3
-        [5,  96,  40, 1, 1, 2],  # 4                    layer4  96
-        [5, 240,  40, 1, 1, 1],  # 5
-        [5, 240,  40, 1, 1, 1],  # 6
-        [5, 120,  48, 1, 1, 1],  # 7
-        [5, 144,  48, 1, 1, 1],  # 8
-        [5, 288,  96, 1, 1, 2],  # 9                    layer9  288
-        [5, 576,  96, 1, 1, 1],  # 10
-        [5, 576,  96, 1, 1, 1],  # 11
+        [5,  96,  40, plug_in_dict[plug_in], 1, 2],  # 4                    layer4  96
+        [5, 240,  40, plug_in_dict[plug_in], 1, 1],  # 5
+        [5, 240,  40, plug_in_dict[plug_in], 1, 1],  # 6
+        [5, 120,  48, plug_in_dict[plug_in], 1, 1],  # 7
+        [5, 144,  48, plug_in_dict[plug_in], 1, 1],  # 8
+        [5, 288,  96, plug_in_dict[plug_in], 1, 2],  # 9                    layer9  288
+        [5, 576,  96, plug_in_dict[plug_in], 1, 1],  # 10
+        [5, 576,  96, plug_in_dict[plug_in], 1, 1],  # 11
     ]
 
     model = MobileNetV3(cfgs, mode='small')
