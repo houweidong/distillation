@@ -422,11 +422,12 @@ class AB_distill_Mobilenetl2Mobilenets(nn.Module):
         res4_s = self.s_net.features[self.layer_s[2]:self.layer_s[3]](res3_s)
 
         out_fs = self.s_net.avgpool(self.s_net.conv(self.s_net.features[self.layer_s[3]:](res4_s))).view(inputs.size(0), -1)
-        out_s = []
-        for i in range(self.s_net.num_attr):
-            out_si = self.s_net.classifier[i](out_fs)
-            out_s.append(out_si)
-        out_s = torch.cat(out_s, dim=1)
+        # out_s = []
+        # for i in range(self.s_net.num_attr):
+        #     out_si = self.s_net.classifier[i](out_fs)
+        #     out_s.append(out_si)
+        # out_s = torch.cat(out_s, dim=1)
+        out_s = self.s_net.classifier(out_fs)
 
         # Teacher network
         res1_t = self.t_net.features[0:self.layer_t[0]](inputs)
@@ -553,11 +554,12 @@ class AB_distill_Mobilenetl2MobilenetsNoConnect(nn.Module):
         res4_s = self.s_net.features[self.layer_s[2]:self.layer_s[3]](res3_s)
 
         out_fs = self.s_net.avgpool(self.s_net.conv(self.s_net.features[self.layer_s[3]:](res4_s))).view(inputs.size(0), -1)
-        out_s = []
-        for i in range(self.s_net.num_attr):
-            out_si = self.s_net.classifier[i](out_fs)
-            out_s.append(out_si)
-        out_s = torch.cat(out_s, dim=1)
+        # out_s = []
+        # for i in range(self.s_net.num_attr):
+        #     out_si = self.s_net.classifier[i](out_fs)
+        #     out_s.append(out_si)
+        # out_s = torch.cat(out_s, dim=1)
+        out_s = self.s_net.classifier(out_fs)
 
         # Features before ReLU
         res1_t = self.t_net.features[self.layer_t[0]].conv[0:2](res1_t)[:, self.selected_channels[0], :, :]

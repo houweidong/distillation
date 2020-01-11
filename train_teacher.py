@@ -95,7 +95,8 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # model, dataloader, opmiter, use ignite's evaluator
 t_net, _, _ = get_model(args.conv, frm='official', name_s=args.name_s, name_t=args.name_t, logger=logger,
-                        pretrained_t=args.pretrained_t, pretrained_s=args.pretrained_s, device=device, plug_in=args.plug_in)
+                        pretrained_t=args.pretrained_t, pretrained_s=args.pretrained_s, device=device,
+                        plug_in=args.plug_in, classifier=args.classifier)
 if device == 'cuda':
     t_net = torch.nn.DataParallel(t_net).cuda()
 

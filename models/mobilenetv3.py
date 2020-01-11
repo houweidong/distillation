@@ -13,6 +13,8 @@ from utils.get_channels import get_channels, get_name_of_alpha_and_beta
 from collections import OrderedDict
 import torch.distributions as tdist
 import numpy as np
+from models.model_utils import *
+from models import model_utils
 
 __all__ = ['get_model', 'get_pair_model', 'MobileNetV3', 'get_channels_for_distill']
 root = os.environ['HOME']
@@ -36,112 +38,6 @@ def _make_divisible(v, divisor, min_value=None):
     if new_v < 0.9 * v:
         new_v += divisor
     return new_v
-
-
-class h_sigmoid(nn.Module):
-    def __init__(self, inplace=True):
-        super(h_sigmoid, self).__init__()
-        self.relu = nn.ReLU6(inplace=inplace)
-
-    def forward(self, x):
-        return self.relu(x + 3) / 6
-
-
-class h_tanh(nn.Module):
-    def __init__(self, inplace=True):
-        super(h_tanh, self).__init__()
-        self.relu = nn.ReLU6(inplace=inplace)
-
-    def forward(self, x):
-        return self.relu(x + 3) / 6 - 0.5
-
-
-class h_swish(nn.Module):
-    def __init__(self, inplace=True):
-        super(h_swish, self).__init__()
-        self.sigmoid = h_sigmoid(inplace=inplace)
-
-    def forward(self, x):
-        return x * self.sigmoid(x)
-
-
-class SELayer(nn.Module):
-    def __init__(self, channel, reduction=4):
-        super(SELayer, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-                nn.Linear(channel, channel // reduction),
-                nn.ReLU(inplace=True),
-                nn.Linear(channel // reduction, channel),
-                h_sigmoid()
-        )
-
-    def forward(self, x):
-        b, c, _, _ = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-        return x * y
-
-
-class ATLayer(nn.Module):
-    def __init__(self, resolution, reduction=4):
-        super(ATLayer, self).__init__()
-        self.fc1 = nn.Sequential(
-                nn.Linear(resolution*resolution, resolution*resolution // reduction),
-                nn.ReLU(inplace=True),
-                nn.Linear(resolution*resolution // reduction, resolution*resolution),
-                h_tanh()
-        )
-
-    def forward(self, x):
-        b, c, w, h = x.size()
-        y = torch.mean(x, dim=1).view(b, w*h)
-        y = self.fc1(y).view(b, 1, w, h)
-        return x * (1 + y)
-
-
-class ATSELayer(nn.Module):
-    def __init__(self, channel, resolution, reduction=4):
-        super(ATSELayer, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-                nn.Linear(channel, channel // reduction),
-                nn.ReLU(inplace=True),
-                nn.Linear(channel // reduction, channel),
-                h_sigmoid()
-        )
-
-        self.fc1 = nn.Sequential(
-                nn.Linear(resolution*resolution, resolution*resolution // reduction),
-                nn.ReLU(inplace=True),
-                nn.Linear(resolution*resolution // reduction, resolution*resolution),
-                h_tanh()
-        )
-
-    def forward(self, x):
-        b, c, w, h = x.size()
-        y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
-
-        z = torch.mean(x, dim=1).view(b, w*h)
-        z = self.fc1(z).view(b, 1, w, h)
-        return x * y * (1 + z)
-
-
-def conv_3x3_bn(inp, oup, stride):
-    return nn.Sequential(
-        nn.Conv2d(inp, oup, 3, stride, 1, bias=False),
-        nn.BatchNorm2d(oup),
-        h_swish()
-    )
-
-
-def conv_1x1_bn(inp, oup):
-    return nn.Sequential(
-        nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
-        nn.BatchNorm2d(oup),
-        h_swish()
-    )
 
 
 class InvertedResidual(nn.Module):
@@ -204,12 +100,17 @@ class InvertedResidual(nn.Module):
 
 
 class MobileNetV3(nn.Module):
-    def __init__(self, cfgs, mode, num_classes=1000, width_mult=1., num_attr=5, dropout=0.1, resolution=224):
+    def __init__(self, cfgs, mode, num_classes=1, width_mult=1., num_attr=5, dropout=0.1, resolution=224,
+                 classifier='Classifier', k=10, reduction=4):
         super(MobileNetV3, self).__init__()
         # setting of inverted residual blocks
+        self.classifier = classifier
         self.cfgs = cfgs
         self.num_attr = num_attr
         self.resolution = resolution
+        self.dropout = dropout
+        self.k = k
+        self.reduction = reduction
         assert mode in ['large', 'small']
 
         # building first layer
@@ -241,31 +142,29 @@ class MobileNetV3(nn.Module):
             h_swish()
         )
         output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 256
-        self.classifier = nn.ModuleList()
-        for i in range(self.num_attr):
-            classifier = nn.Sequential(
-                # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
-                nn.Linear(256, output_channel),
-                # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
-                h_swish(),
-                nn.Dropout(dropout),
-                nn.Linear(output_channel, num_classes),
-                # nn.BatchNorm1d(num_classes) if mode == 'small' else nn.Sequential(),
-                # h_swish() if mode == 'small' else nn.Sequential()
-            )
-            self.classifier.append(classifier)
+        # self.classifier = nn.ModuleList()
+        # for i in range(self.num_attr):
+        #     classifier = nn.Sequential(
+        #         # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
+        #         nn.Linear(256, output_channel),
+        #         # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
+        #         h_swish(),
+        #         nn.Dropout(dropout),
+        #         nn.Linear(output_channel, num_classes),
+        #         # nn.BatchNorm1d(num_classes) if mode == 'small' else nn.Sequential(),
+        #         # h_swish() if mode == 'small' else nn.Sequential()
+        #     )
+        #     self.classifier.append(classifier)
+        self.classifier = getattr(model_utils, self.classifier)(self.num_attr, output_channel, self.dropout, self.k, self.reduction)
         self._initialize_weights()
+        # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.features(x)
         x = self.conv(x)
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
-        result = []
-        for i in range(self.num_attr):
-            y = self.classifier[i](x)
-            result.append(y)
-        return torch.cat(result, dim=1)
+        return self.classifier(x)
 
     def _initialize_weights(self):
         for m in self.modules():
@@ -312,6 +211,7 @@ def mobile3l(**kwargs):
     name_t = kwargs['name_t'] if 'name_t' in kwargs else None
     logger = kwargs['logger'] if 'logger' in kwargs else print
     plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
+    classifier = kwargs['classifier']
     plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     plut_off_layers = set([1, 2, 3] + [7, 8, 9, 10])
     plug_on_layers = set(range(1, 16)) - plut_off_layers
@@ -336,7 +236,7 @@ def mobile3l(**kwargs):
     for ly in plug_on_layers:
         cfgs[ly-1][3] = plug_in_dict[plug_in]
     resolutions = get_resolution_for_layers(cfgs, plug_on_layers)
-    model = MobileNetV3(cfgs, mode='large')
+    model = MobileNetV3(cfgs, mode='large', classifier=classifier)
     channels, layers = get_channels_for_distill(cfgs)
     if pretrained:
         logger('\nloading model from {}'.format(name_t))
@@ -383,6 +283,7 @@ def mobile3s(**kwargs):
     name_s = kwargs['name_s'] if 'name_s' in kwargs else None
     logger = kwargs['logger'] if 'logger' in kwargs else print
     plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
+    classifier = kwargs['classifier']
     plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     cfgs = [
         # k, t, c, SE, NL, s
@@ -399,7 +300,7 @@ def mobile3s(**kwargs):
         [5, 576,  96, plug_in_dict[plug_in], 1, 1],  # 11
     ]
 
-    model = MobileNetV3(cfgs, mode='small')
+    model = MobileNetV3(cfgs, mode='small', classifier=classifier)
 
     if pretrained:
         logger('\nloading model from {}'.format(name_s))
@@ -418,6 +319,7 @@ def mobile3s(**kwargs):
 def mobile3ss(**kwargs):
     # device = kwargs['device'] if 'device' in kwargs else 'cuda'
     # pretrained = kwargs['pretrained'] if 'pretrained' in kwargs else True
+    classifier = kwargs['classifier']
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -432,7 +334,7 @@ def mobile3ss(**kwargs):
         [5, 672, 160, 1, 1, 2],  # 10                   layer10 672
         [5, 960, 160, 1, 1, 1]   # 11
     ]
-    model = MobileNetV3(cfgs, mode='small')
+    model = MobileNetV3(cfgs, mode='small', classifier=classifier)
 
     # if pretrained:
     #     path = os.path.join(root, '.torch/models/mobilenetv3-small-c7eb32fe.pth')
@@ -458,6 +360,7 @@ def get_pair_model_s(**kwargs):
     load_BN = kwargs['load_BN']
     logger = kwargs['logger']
     bucket = kwargs['bucket']
+    classifier = kwargs['classifier']
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -491,14 +394,14 @@ def get_pair_model_s(**kwargs):
         [5, 576,  96, 1, 1, 1],  # 10
         [5, 576,  96, 1, 1, 1],  # 11
     ]
-    model_t = MobileNetV3(cfgs_t, mode='large')
+    model_t = MobileNetV3(cfgs_t, mode='large', classifier=classifier)
     channels_t, layers_t = get_channels_for_distill(cfgs_t)
     logger('\nloading model from {}'.format(name_t))
     path_t = os.path.join(root, '.torch/models/', name_t)
     state_dict_t = torch.load(path_t, map_location=device)
     logger('load completed')
 
-    model_s = MobileNetV3(cfgs_s, mode='small')
+    model_s = MobileNetV3(cfgs_s, mode='small', classifier=classifier)
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
     index, alpha, beta = get_channels(state_dict_t, layers_t, channels_s, 'uniform', bucket)
 
@@ -570,6 +473,7 @@ def get_pair_model_ss(**kwargs):
     logger = kwargs['logger']
     bucket = kwargs['bucket']
     freeze_backbone = ['freeze_backbone']
+    classifier = kwargs['classifier']
 
     cfgs_t = [
         # k, t, c, SE, NL, s
@@ -603,14 +507,14 @@ def get_pair_model_ss(**kwargs):
         [-1, -1, -1, -1, -1, -1],
         [5, 576,  96, 1, 1, 1],  # 11
     ]
-    model_t = MobileNetV3(cfgs_t, mode='large')
+    model_t = MobileNetV3(cfgs_t, mode='large', classifier=classifier)
     channels_t, layers_t = get_channels_for_distill(cfgs_t)
     logger('\nloading model from {}'.format(name_t))
     path_t = os.path.join(root, '.torch/models/', name_t)
     state_dict_t = torch.load(path_t, map_location=device)
     logger('load completed')
 
-    model_s = MobileNetV3(cfgs_s, mode='small')
+    model_s = MobileNetV3(cfgs_s, mode='small', classifier=classifier)
     channels_s, layers_s = get_channels_for_distill(cfgs_s)
     index, _, _ = get_channels(state_dict_t, layers_t, channels_s, 'uniform', bucket)
 
