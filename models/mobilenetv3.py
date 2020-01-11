@@ -76,9 +76,9 @@ class ATLayer(nn.Module):
     def __init__(self, resolution, reduction=4):
         super(ATLayer, self).__init__()
         self.fc1 = nn.Sequential(
-                nn.Linear(resolution, resolution // reduction),
+                nn.Linear(resolution*resolution, resolution*resolution // reduction),
                 nn.ReLU(inplace=True),
-                nn.Linear(resolution // reduction, resolution),
+                nn.Linear(resolution*resolution // reduction, resolution*resolution),
                 h_sigmoid()
         )
 
@@ -92,7 +92,8 @@ class ATLayer(nn.Module):
 class ATSELayer(nn.Module):
     def __init__(self, channel, resolution, reduction=4):
         super(ATSELayer, self).__init__()
-        self.fc = nn.Sequential(
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc0 = nn.Sequential(
                 nn.Linear(channel, channel // reduction),
                 nn.ReLU(inplace=True),
                 nn.Linear(channel // reduction, channel),
@@ -109,7 +110,7 @@ class ATSELayer(nn.Module):
     def forward(self, x):
         b, c, w, h = x.size()
         y = self.avg_pool(x).view(b, c)
-        y = self.fc(y).view(b, c, 1, 1)
+        y = self.fc0(y).view(b, c, 1, 1)
 
         z = torch.mean(x, dim=1).view(b, w*h)
         z = self.fc1(z).view(b, 1, w, h)
@@ -133,9 +134,23 @@ def conv_1x1_bn(inp, oup):
 
 
 class InvertedResidual(nn.Module):
-    def __init__(self, inp, hidden_dim, oup, kernel_size, stride, use_se, use_hs):
+
+    def get_plug(self, hidden_dim, resolution, plug_in):
+        if plug_in == 0:
+            return nn.Sequential()
+        elif plug_in == 1:
+            return SELayer(hidden_dim)
+        elif plug_in == 2:
+            return ATLayer(resolution)
+        elif plug_in == 3:
+            return ATSELayer(hidden_dim, resolution)
+        else:
+            raise Exception('not implemented plug in {}'.format(plug_in))
+
+    def __init__(self, inp, hidden_dim, oup, kernel_size, stride, plug_in, use_hs, resolution):
         super(InvertedResidual, self).__init__()
         assert stride in [1, 2]
+        assert plug_in in [0, 1, 2, 3]
 
         self.identity = stride == 1 and inp == oup
 
@@ -146,7 +161,8 @@ class InvertedResidual(nn.Module):
                 nn.BatchNorm2d(hidden_dim),
                 h_swish() if use_hs else nn.ReLU(inplace=True),
                 # Squeeze-and-Excite
-                SELayer(hidden_dim) if use_se else nn.Sequential(),
+                # SELayer(hidden_dim) if plug_in else nn.Sequential(),
+                self.get_plug(hidden_dim, resolution, plug_in),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
                 nn.BatchNorm2d(oup),
@@ -161,7 +177,8 @@ class InvertedResidual(nn.Module):
                 nn.Conv2d(hidden_dim, hidden_dim, kernel_size, stride, (kernel_size - 1) // 2, groups=hidden_dim, bias=False),
                 nn.BatchNorm2d(hidden_dim),
                 # Squeeze-and-Excite
-                SELayer(hidden_dim) if use_se else nn.Sequential(),
+                # SELayer(hidden_dim) if plug_in else nn.Sequential(),
+                self.get_plug(hidden_dim, resolution, plug_in),
                 h_swish() if use_hs else nn.ReLU(inplace=True),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
@@ -176,22 +193,27 @@ class InvertedResidual(nn.Module):
 
 
 class MobileNetV3(nn.Module):
-    def __init__(self, cfgs, mode, num_classes=1000, width_mult=1., num_attr=5, dropout=0.1):
+    def __init__(self, cfgs, mode, num_classes=1000, width_mult=1., num_attr=5, dropout=0.1, resolution=224):
         super(MobileNetV3, self).__init__()
         # setting of inverted residual blocks
         self.cfgs = cfgs
         self.num_attr = num_attr
+        self.resolution = resolution
         assert mode in ['large', 'small']
 
         # building first layer
         input_channel = _make_divisible(16 * width_mult, 8)
         layers = [conv_3x3_bn(3, input_channel, 2)]
+        temp_r = resolution // 2
         # building inverted residual blocks
         block = InvertedResidual
-        for k, exp_size, c, use_se, use_hs, s in self.cfgs:
+        # for k, exp_size, c, use_se, use_hs, s in self.cfgs:
+        for k, exp_size, c, plug_in, use_hs, s in self.cfgs:
+            if s == 2:
+                temp_r //= 2
             if k != -1:
                 output_channel = _make_divisible(c * width_mult, 8)
-                layers.append(block(input_channel, exp_size, output_channel, k, s, use_se, use_hs))
+                layers.append(block(input_channel, exp_size, output_channel, k, s, plug_in, use_hs, temp_r))
                 input_channel = output_channel
             else:
                 layers.append(nn.Sequential())
@@ -215,7 +237,7 @@ class MobileNetV3(nn.Module):
                 nn.Linear(256, output_channel),
                 # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
                 h_swish(),
-                nn.Dropout(0.1),
+                nn.Dropout(dropout),
                 nn.Linear(output_channel, num_classes),
                 # nn.BatchNorm1d(num_classes) if mode == 'small' else nn.Sequential(),
                 # h_swish() if mode == 'small' else nn.Sequential()
@@ -272,12 +294,12 @@ def mobile3l(**kwargs):
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
-        [3,  64,  24, 0, 0, 2],  # 2                    layer2  64
+        [3,  64,  24, 0, 0, 2],  # 2                                        layer2  64
         [3,  72,  24, 0, 0, 1],  # 3
-        [5,  72,  40, 1, 0, 2],  # 4                    layer4  72
-        [5, 120,  40, 1, 0, 1],  # 5
-        [5, 120,  40, 1, 0, 1],  # 6
-        [3, 240,  80, 0, 1, 2],  # 7                    layer7  240
+        [5,  72,  40, plug_in_dict[plug_in], 0, 2],  # 4                                        layer4  72
+        [5, 120,  40, plug_in_dict[plug_in], 0, 1],  # 5
+        [5, 120,  40, plug_in_dict[plug_in], 0, 1],  # 6
+        [3, 240,  80, plug_in_dict[plug_in], 1, 2],  # 7                                        layer7  240
         [3, 200,  80, 0, 1, 1],  # 8
         [3, 184,  80, 0, 1, 1],  # 9
         [3, 184,  80, 0, 1, 1],  # 10
@@ -294,6 +316,8 @@ def mobile3l(**kwargs):
         path = os.path.join(root, '.torch/models/', name_t)
         state_dict = torch.load(path, map_location=device)
         strict = False if frm == 'official' else True
+        # for the deleted fc, there has dismath problem for conv's first conv layer
+        # if the dim dismath but the name is same, the load procedure will fail, so deleted the params
         if not strict:
             for k in list(state_dict.keys()):
                 if k.startswith('conv.0.'):
@@ -333,6 +357,7 @@ def mobile3s(**kwargs):
         logger('\nloading model from {}'.format(name_s))
         path = os.path.join(root, '.torch/models/', name_s)
         state_dict = torch.load(path, map_location=device)
+        # for the deleted fc, there has dismath problem for conv's first conv layer
         for k in list(state_dict.keys()):
             if k.startswith('conv.0.'):
                 state_dict.pop(k)
