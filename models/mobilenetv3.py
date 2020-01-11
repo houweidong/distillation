@@ -47,6 +47,15 @@ class h_sigmoid(nn.Module):
         return self.relu(x + 3) / 6
 
 
+class h_tanh(nn.Module):
+    def __init__(self, inplace=True):
+        super(h_tanh, self).__init__()
+        self.relu = nn.ReLU6(inplace=inplace)
+
+    def forward(self, x):
+        return self.relu(x + 3) / 6 - 0.5
+
+
 class h_swish(nn.Module):
     def __init__(self, inplace=True):
         super(h_swish, self).__init__()
@@ -81,14 +90,14 @@ class ATLayer(nn.Module):
                 nn.Linear(resolution*resolution, resolution*resolution // reduction),
                 nn.ReLU(inplace=True),
                 nn.Linear(resolution*resolution // reduction, resolution*resolution),
-                h_sigmoid()
+                h_tanh()
         )
 
     def forward(self, x):
         b, c, w, h = x.size()
         y = torch.mean(x, dim=1).view(b, w*h)
         y = self.fc1(y).view(b, 1, w, h)
-        return x * y
+        return x * (1 + y)
 
 
 class ATSELayer(nn.Module):
@@ -106,7 +115,7 @@ class ATSELayer(nn.Module):
                 nn.Linear(resolution*resolution, resolution*resolution // reduction),
                 nn.ReLU(inplace=True),
                 nn.Linear(resolution*resolution // reduction, resolution*resolution),
-                h_sigmoid()
+                h_tanh()
         )
 
     def forward(self, x):
@@ -116,7 +125,7 @@ class ATSELayer(nn.Module):
 
         z = torch.mean(x, dim=1).view(b, w*h)
         z = self.fc1(z).view(b, 1, w, h)
-        return x * y * z
+        return x * y * (1 + z)
 
 
 def conv_3x3_bn(inp, oup, stride):
@@ -340,26 +349,26 @@ def mobile3l(**kwargs):
             for k in list(state_dict.keys()):
                 if k.startswith('conv.0.'):
                     state_dict.pop(k)
-        if plug_in in ['at', 'atse']:
-            for k in list(state_dict.keys()):
-                if 'conv.5.fc.' in k:
-                    numpy_t = state_dict[k].cpu().numpy()
-                    sample = tdist.Normal(torch.tensor([np.mean(numpy_t)]), torch.tensor([np.std(numpy_t)]))
-                    l = int(k.split('.')[1])
-                    state_dict[k.replace('fc', 'fc1')] = sample.sample((resolutions[l]*resolutions[l]//4, resolutions[l]*resolutions[l]))
-                    k_new = k.replace('fc', 'fc1')
-                    if k.endswith('0.weight'):
-                        state_dict[k_new] = sample.sample(
-                            (resolutions[l] * resolutions[l] // 4, resolutions[l] * resolutions[l])).squeeze(-1)
-                    elif k.endswith('0.bias'):
-                        state_dict[k_new] = sample.sample((resolutions[l] * resolutions[l] // 4, )).squeeze(-1)
-                    elif k.endswith('2.weight'):
-                        state_dict[k_new] = sample.sample(
-                            (resolutions[l] * resolutions[l], resolutions[l] * resolutions[l]//4)).squeeze(-1)
-                    elif k.endswith('2.bias'):
-                        state_dict[k_new] = sample.sample((resolutions[l] * resolutions[l], )).squeeze(-1)
-                    else:
-                        raise Exception('exception for key in se layer!')
+        # if plug_in in ['at', 'atse']:
+        #     for k in list(state_dict.keys()):
+        #         if 'conv.5.fc.' in k:
+        #             numpy_t = state_dict[k].cpu().numpy()
+        #             sample = tdist.Normal(torch.tensor([np.mean(numpy_t)]), torch.tensor([np.std(numpy_t)]))
+        #             l = int(k.split('.')[1])
+        #             # state_dict[k.replace('fc', 'fc1')] = sample.sample((resolutions[l]*resolutions[l]//4, resolutions[l]*resolutions[l]))
+        #             k_new = k.replace('fc', 'fc1')
+        #             if k.endswith('0.weight'):
+        #                 state_dict[k_new] = sample.sample(
+        #                     (resolutions[l] * resolutions[l] // 4, resolutions[l] * resolutions[l])).squeeze(-1)
+        #             elif k.endswith('0.bias'):
+        #                 state_dict[k_new] = sample.sample((resolutions[l] * resolutions[l] // 4, )).squeeze(-1)
+        #             elif k.endswith('2.weight'):
+        #                 state_dict[k_new] = sample.sample(
+        #                     (resolutions[l] * resolutions[l], resolutions[l] * resolutions[l]//4)).squeeze(-1)
+        #             elif k.endswith('2.bias'):
+        #                 state_dict[k_new] = sample.sample((resolutions[l] * resolutions[l], )).squeeze(-1)
+        #             else:
+        #                 raise Exception('exception for key in se layer!')
 
         model.load_state_dict(state_dict, strict=strict)
 
