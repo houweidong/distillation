@@ -11,6 +11,8 @@ import torch
 import os
 from utils.get_channels import get_channels, get_name_of_alpha_and_beta
 from collections import OrderedDict
+import torch.distributions as tdist
+import numpy as np
 
 __all__ = ['get_model', 'get_pair_model', 'MobileNetV3', 'get_channels_for_distill']
 root = os.environ['HOME']
@@ -93,7 +95,7 @@ class ATSELayer(nn.Module):
     def __init__(self, channel, resolution, reduction=4):
         super(ATSELayer, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc0 = nn.Sequential(
+        self.fc = nn.Sequential(
                 nn.Linear(channel, channel // reduction),
                 nn.ReLU(inplace=True),
                 nn.Linear(channel // reduction, channel),
@@ -110,7 +112,7 @@ class ATSELayer(nn.Module):
     def forward(self, x):
         b, c, w, h = x.size()
         y = self.avg_pool(x).view(b, c)
-        y = self.fc0(y).view(b, c, 1, 1)
+        y = self.fc(y).view(b, c, 1, 1)
 
         z = torch.mean(x, dim=1).view(b, w*h)
         z = self.fc1(z).view(b, 1, w, h)
@@ -283,6 +285,17 @@ def get_channels_for_distill(cfgs):
     return channels, layers
 
 
+def get_resolution_for_layers(cfgs, layers):
+    resolution = {}
+    resolution_temp = 224 // 2
+    for i, cfg in enumerate(cfgs):
+        if cfg[-1] == 2:
+            resolution_temp //= 2
+        if i+1 in layers:
+            resolution[i+1] = resolution_temp
+    return resolution
+
+
 def mobile3l(**kwargs):
     frm = kwargs['frm'] if 'frm' in kwargs else 'my'
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
@@ -291,26 +304,31 @@ def mobile3l(**kwargs):
     logger = kwargs['logger'] if 'logger' in kwargs else print
     plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
     plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
+    plut_off_layers = set([1, 2, 3] + [7, 8, 9, 10])
+    plug_on_layers = set(range(1, 16)) - plut_off_layers
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
-        [3,  64,  24, 0, 0, 2],  # 2                                        layer2  64
+        [3,  64,  24, 0, 0, 2],  # 2                    layer2  64
         [3,  72,  24, 0, 0, 1],  # 3
-        [5,  72,  40, plug_in_dict[plug_in], 0, 2],  # 4                                        layer4  72
-        [5, 120,  40, plug_in_dict[plug_in], 0, 1],  # 5
-        [5, 120,  40, plug_in_dict[plug_in], 0, 1],  # 6
-        [3, 240,  80, plug_in_dict[plug_in], 1, 2],  # 7                                        layer7  240
+        [5,  72,  40, 1, 0, 2],  # 4                    layer4  72
+        [5, 120,  40, 1, 0, 1],  # 5
+        [5, 120,  40, 1, 0, 1],  # 6
+        [3, 240,  80, 0, 1, 2],  # 7                    layer7  240
         [3, 200,  80, 0, 1, 1],  # 8
         [3, 184,  80, 0, 1, 1],  # 9
         [3, 184,  80, 0, 1, 1],  # 10
-        [3, 480, 112, plug_in_dict[plug_in], 1, 1],  # 11
-        [3, 672, 112, plug_in_dict[plug_in], 1, 1],  # 12
-        [5, 672, 160, plug_in_dict[plug_in], 1, 1],  # 13
-        [5, 672, 160, plug_in_dict[plug_in], 1, 2],  # 14                   layer14 672
-        [5, 960, 160, plug_in_dict[plug_in], 1, 1]   # 15
+        [3, 480, 112, 1, 1, 1],  # 11
+        [3, 672, 112, 1, 1, 1],  # 12
+        [5, 672, 160, 1, 1, 1],  # 13
+        [5, 672, 160, 1, 1, 2],  # 14                   layer14 672
+        [5, 960, 160, 1, 1, 1]   # 15
     ]
+    for ly in plug_on_layers:
+        cfgs[ly-1][3] = plug_in_dict[plug_in]
+    resolutions = get_resolution_for_layers(cfgs, plug_on_layers)
     model = MobileNetV3(cfgs, mode='large')
-
+    channels, layers = get_channels_for_distill(cfgs)
     if pretrained:
         logger('\nloading model from {}'.format(name_t))
         path = os.path.join(root, '.torch/models/', name_t)
@@ -322,10 +340,31 @@ def mobile3l(**kwargs):
             for k in list(state_dict.keys()):
                 if k.startswith('conv.0.'):
                     state_dict.pop(k)
+        if plug_in in ['at', 'atse']:
+            for k in list(state_dict.keys()):
+                if 'conv.5.fc.' in k:
+                    numpy_t = state_dict[k].cpu().numpy()
+                    sample = tdist.Normal(torch.tensor([np.mean(numpy_t)]), torch.tensor([np.std(numpy_t)]))
+                    l = int(k.split('.')[1])
+                    state_dict[k.replace('fc', 'fc1')] = sample.sample((resolutions[l]*resolutions[l]//4, resolutions[l]*resolutions[l]))
+                    k_new = k.replace('fc', 'fc1')
+                    if k.endswith('0.weight'):
+                        state_dict[k_new] = sample.sample(
+                            (resolutions[l] * resolutions[l] // 4, resolutions[l] * resolutions[l])).squeeze(-1)
+                    elif k.endswith('0.bias'):
+                        state_dict[k_new] = sample.sample((resolutions[l] * resolutions[l] // 4, )).squeeze(-1)
+                    elif k.endswith('2.weight'):
+                        state_dict[k_new] = sample.sample(
+                            (resolutions[l] * resolutions[l], resolutions[l] * resolutions[l]//4)).squeeze(-1)
+                    elif k.endswith('2.bias'):
+                        state_dict[k_new] = sample.sample((resolutions[l] * resolutions[l], )).squeeze(-1)
+                    else:
+                        raise Exception('exception for key in se layer!')
+
         model.load_state_dict(state_dict, strict=strict)
 
         logger('load completed')
-    channels, layers = get_channels_for_distill(cfgs)
+
     return model, channels, layers
 
 
