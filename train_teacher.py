@@ -96,7 +96,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # model, dataloader, opmiter, use ignite's evaluator
 t_net, _, _ = get_model(args.conv, frm='official', name_s=args.name_s, name_t=args.name_t, logger=logger,
                         pretrained_t=args.pretrained_t, pretrained_s=args.pretrained_s, device=device,
-                        plug_in=args.plug_in, classifier=args.classifier)
+                        plug_in=args.plug_in, classifier=args.classifier, dropout=args.dropout)
 if device == 'cuda':
     t_net = torch.nn.DataParallel(t_net).cuda()
 
@@ -107,7 +107,7 @@ trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[
 optimizer = optim.SGD(t_net.parameters(), lr=args.lr, nesterov=args.nesterov, momentum=args.momentum, weight_decay=args.weight_decay)
 # optimizer = optim.adam
 if args.scheduler == 'step':
-    optimizer = MultiStepLR(optimizer, milestones=[10, 15], gamma=0.1)
+    optimizer = MultiStepLR(optimizer, milestones=[10, 15, 20], gamma=0.1)
 elif args.scheduler == 'cos':
     optimizer = CosineAnnealingLR(optimizer, T_max=20, eta_min=1e-3)
 elif args.scheduler == 'pleau':

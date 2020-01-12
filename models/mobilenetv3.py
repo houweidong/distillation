@@ -212,6 +212,7 @@ def mobile3l(**kwargs):
     logger = kwargs['logger'] if 'logger' in kwargs else print
     plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
     classifier = kwargs['classifier']
+    dropout = kwargs['dropout']
     plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     plut_off_layers = set([1, 2, 3] + [7, 8, 9, 10])
     plug_on_layers = set(range(1, 16)) - plut_off_layers
@@ -236,7 +237,7 @@ def mobile3l(**kwargs):
     for ly in plug_on_layers:
         cfgs[ly-1][3] = plug_in_dict[plug_in]
     resolutions = get_resolution_for_layers(cfgs, plug_on_layers)
-    model = MobileNetV3(cfgs, mode='large', classifier=classifier)
+    model = MobileNetV3(cfgs, mode='large', classifier=classifier, dropout=dropout)
     channels, layers = get_channels_for_distill(cfgs)
     if pretrained:
         logger('\nloading model from {}'.format(name_t))
