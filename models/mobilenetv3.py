@@ -137,10 +137,10 @@ class MobileNetV3(nn.Module):
             # SELayer(960) if mode == 'small' else nn.Sequential()
             nn.Sequential()
         )
-        self.avgpool = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),
-            h_swish()
-        )
+        # self.avgpool = nn.Sequential(
+        #     nn.AdaptiveAvgPool2d((1, 1)),
+        #     h_swish()
+        # )
         output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 256
         # self.classifier = nn.ModuleList()
         # for i in range(self.num_attr):
@@ -162,8 +162,8 @@ class MobileNetV3(nn.Module):
     def forward(self, x):
         x = self.features(x)
         x = self.conv(x)
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+        # x = self.avgpool(x)
+        # x = x.view(x.size(0), -1)
         return self.classifier(x)
 
     def _initialize_weights(self):

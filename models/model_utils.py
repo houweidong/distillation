@@ -114,6 +114,10 @@ class Classifier(nn.Module):
         self.num_attr = num_attr
         self.classifier = nn.ModuleList()
         self.sigmoid = nn.Sigmoid()
+        self.avgpool = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            h_swish()
+        )
         for i in range(self.num_attr):
             classifier = nn.Sequential(
                 # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
@@ -128,6 +132,8 @@ class Classifier(nn.Module):
             self.classifier.append(classifier)
 
     def forward(self, x):
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
         result = []
         for i in range(self.num_attr):
             y = self.classifier[i](x)
@@ -163,7 +169,7 @@ class PrTp(nn.Module):
             # 10 prototype just for test
             setattr(self, 'attention' + str(i) + '_cv1', nn.Conv2d(self.in_features, self.in_features // self.reduction, (3, 3), padding=1))
             setattr(self, 'attention' + str(i) + '_cv1_bn1', nn.BatchNorm2d(self.in_features // self.reduction))
-            setattr(self, 'attention' + str(i) + '_cv2', nn.Conv2d(self.in_features, k, (3, 3), padding=1))
+            setattr(self, 'attention' + str(i) + '_cv2', nn.Conv2d(self.in_features // self.reduction, k, (3, 3), padding=1))
             setattr(self, 'attention' + str(i) + '_cv2_bn2', nn.BatchNorm2d(k))
 
             setattr(self, 'prototype' + str(i) + '_coe1', nn.Linear(self.in_features, self.in_features // self.reduction))
@@ -181,7 +187,7 @@ class PrTp(nn.Module):
             cv2_bn2 = getattr(self, 'attention' + str(i) + '_cv2_bn2')(cv2_rl)
 
             prototype_coe1 = self.relu(getattr(self, 'prototype' + str(i) + '_coe1')(self.pt_avg(x).view(batch, -1)))
-            prototype_coe2 = self.tanh(getattr(self, 'prototype' + str(i) + '_coe2')(prototype_coe1))
+            prototype_coe2 = self.h_tanh(getattr(self, 'prototype' + str(i) + '_coe2')(prototype_coe1))
 
             # multi prototype with attention map to produce new attention map
             new_attention = self.h_sigmoid((prototype_coe2[..., None, None] * cv2_bn2).sum(1, keepdim=True))
@@ -218,7 +224,7 @@ class CPrTp(nn.Module):
         setattr(self, 'attention' + '_cv1',
                 nn.Conv2d(self.in_features, self.in_features // self.reduction, (3, 3), padding=1))
         setattr(self, 'attention' + '_cv1_bn1', nn.BatchNorm2d(self.in_features // self.reduction))
-        setattr(self, 'attention' + '_cv2', nn.Conv2d(self.in_features, k, (3, 3), padding=1))
+        setattr(self, 'attention' + '_cv2', nn.Conv2d(self.in_features // self.reduction, k, (3, 3), padding=1))
         setattr(self, 'attention' + '_cv2_bn2', nn.BatchNorm2d(k))
 
         for i in range(self.num_attr):
@@ -243,7 +249,7 @@ class CPrTp(nn.Module):
 
         for i in range(self.num_attr):
             prototype_coe1 = self.relu(getattr(self, 'prototype' + str(i) + '_coe1')(self.pt_avg(x).view(batch, -1)))
-            prototype_coe2 = self.tanh(getattr(self, 'prototype' + str(i) + '_coe2')(prototype_coe1))
+            prototype_coe2 = self.h_tanh(getattr(self, 'prototype' + str(i) + '_coe2')(prototype_coe1))
 
             # multi prototype with attention map to produce new attention map
             new_attention = self.h_sigmoid((prototype_coe2[..., None, None] * cv2_bn2).sum(1, keepdim=True))
@@ -280,7 +286,7 @@ class PCPrTp(nn.Module):
         setattr(self, 'attention' + '_cv1',
                 nn.Conv2d(self.in_features, self.in_features // self.reduction, (3, 3), padding=1))
         setattr(self, 'attention' + '_cv1_bn1', nn.BatchNorm2d(self.in_features // self.reduction))
-        setattr(self, 'attention' + '_cv2', nn.Conv2d(self.in_features, k//2, (3, 3), padding=1))
+        setattr(self, 'attention' + '_cv2', nn.Conv2d(self.in_features // self.reduction, k//2, (3, 3), padding=1))
         setattr(self, 'attention' + '_cv2_bn2', nn.BatchNorm2d(k//2))
 
         for i in range(self.num_attr):
@@ -290,7 +296,7 @@ class PCPrTp(nn.Module):
             setattr(self, 'attention' + str(i) + '_cv1',
                     nn.Conv2d(self.in_features, self.in_features // self.reduction, (3, 3), padding=1))
             setattr(self, 'attention' + str(i) + '_cv1_bn1', nn.BatchNorm2d(self.in_features // self.reduction))
-            setattr(self, 'attention' + str(i) + '_cv2', nn.Conv2d(self.in_features, k//2, (3, 3), padding=1))
+            setattr(self, 'attention' + str(i) + '_cv2', nn.Conv2d(self.in_features // self.reduction, k//2, (3, 3), padding=1))
             setattr(self, 'attention' + str(i) + '_cv2_bn2', nn.BatchNorm2d(k//2))
 
             setattr(self, 'prototype' + str(i) + '_coe1',
@@ -316,7 +322,7 @@ class PCPrTp(nn.Module):
             cv2_bn2 = getattr(self, 'attention' + str(i) + '_cv2_bn2')(cv2_rl)
 
             prototype_coe1 = self.relu(getattr(self, 'prototype' + str(i) + '_coe1')(self.pt_avg(x).view(batch, -1)))
-            prototype_coe2 = self.tanh(getattr(self, 'prototype' + str(i) + '_coe2')(prototype_coe1))
+            prototype_coe2 = self.h_tanh(getattr(self, 'prototype' + str(i) + '_coe2')(prototype_coe1))
 
             cv2_bn2 = torch.cat([cv2_bn2_cm, cv2_bn2], 1)
 
