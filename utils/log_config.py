@@ -19,6 +19,8 @@ def log_config(args, logger=None, single=False):
             pop_list.extend(['pretrained_s', 'name_s'])
         elif args.conv in ['mobile3s', 'mobile3ss']:
             pop_list.extend(['pretrained_t', 'name_t'])
+        elif args.conv == 'lsnet':
+            pop_list.extend(['pretrained_s', 'name_s', 'pretrained_t', 'name_t'])
         else:
             raise Exception('args.conv error')
         log_names.extend(['weight_decay', 'n_epochs'])

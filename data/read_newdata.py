@@ -48,7 +48,7 @@ class NewdataAttr(Dataset):
             anno_path = os.path.join(anno_dir, anno_txt)
             with open(anno_path) as f:
                 lines = f.readlines()
-                lines = lines[:32] if self.state else lines
+                lines = lines[:20] if self.state else lines
                 if subset == 'train':
                     lines = [lines[i] for i in range(len(lines)) if not str(i).endswith(('3' '6', '9'))]
                 else:

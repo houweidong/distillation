@@ -148,7 +148,7 @@ def parse_opts():
     parser.add_argument(
         '--conv',
         default='resnet18',
-        choices=['resnet18', 'vgg', 'fpn18', 'detnet', 'mobilenet', 'mobile3l', 'mobile3s', 'mobile3ss'],
+        choices=['resnet18', 'vgg', 'fpn18', 'detnet', 'mobilenet', 'mobile3l', 'mobile3s', 'mobile3ss', 'lsnet'],
         type=str,
         help=pretrainedmodels.model_names)
     parser.add_argument(

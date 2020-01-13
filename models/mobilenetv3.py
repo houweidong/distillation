@@ -16,7 +16,8 @@ import numpy as np
 from models.model_utils import *
 from models import model_utils
 
-__all__ = ['get_model', 'get_pair_model', 'MobileNetV3', 'get_channels_for_distill']
+__all__ = ['MobileNetV3', 'get_channels_for_distill', 'mobile3l', 'mobile3s', 'mobile3ss', 'get_pair_model_s',
+           'get_pair_model_ss']
 root = os.environ['HOME']
 
 
@@ -346,13 +347,6 @@ def mobile3ss(**kwargs):
     return model, channels, layers
 
 
-def get_model(conv, **kwargs):
-    model = {'mobile3l': mobile3l, 'mobile3s': mobile3s, 'mobile3ss': mobile3ss}
-    if conv not in model:
-        raise Exception('not implemented model')
-    return model[conv](**kwargs)
-
-
 def get_pair_model_s(**kwargs):
     device = kwargs['device'] if 'device' in kwargs else 'cuda'
     name_t = kwargs['name_t']
@@ -548,7 +542,3 @@ def get_pair_model_ss(**kwargs):
     model_t.load_state_dict(state_dict_t, strict=True)
     return model_t, model_s, channels_t, channels_s, layers_t, layers_s, index, ids_list
 
-
-def get_pair_model(size, **kwargs):
-    model = {'s': get_pair_model_s, 'ss': get_pair_model_ss}
-    return model[size](**kwargs)

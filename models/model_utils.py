@@ -121,7 +121,7 @@ class Classifier(nn.Module):
         for i in range(self.num_attr):
             classifier = nn.Sequential(
                 # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
-                nn.Linear(256, in_features),
+                nn.Linear(in_features, in_features),
                 # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
                 h_swish(),
                 nn.Dropout(dropout),
