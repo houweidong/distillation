@@ -3,6 +3,7 @@ import torch.nn.functional as F
 from functools import partial
 from data.attributes import NewAttributes
 from torch.nn import MSELoss, KLDivLoss
+from torch.autograd import Variable
 
 
 def exp_loss(pred, alpha=-23, beta=-18):
@@ -202,3 +203,49 @@ def multitask_loss(output, label, loss_fns):
             gt = torch.masked_select(target[i].squeeze(1), mask[i].squeeze(1).bool())  # .view(-1, target[i].size(1))
             loss += loss_fns[i](output_fil, gt)
     return loss
+
+
+def multitask_loss_balance(output, label, w_p, w_n):
+    target, mask = label
+    n_tasks_all = len(target)
+    batch_size = target[0].size(0)
+    loss = 0
+    for i in range(n_tasks_all):
+        # Only add loss regarding this attribute if it is present in any sample of this batch
+        if mask[i].any():
+            mask_temp = mask[i].repeat((4, 1))
+            target_temp = target[i].repeat((4, 1))
+            output_fil = torch.masked_select(output[:, i], mask_temp.squeeze(1).bool())  # .view(-1, output[i].size(1))
+            gt = torch.masked_select(target_temp.squeeze(1), mask_temp.squeeze(1).bool())  # .view(-1, target[i].size(1))
+            L = gt.size(0)
+            w = torch.zeros(L).cuda()
+            w[gt.data == 1] = w_p[i]
+            w[gt.data == 0] = w_n[i]
+            w = Variable(w, requires_grad=False)
+            temp = - w * (gt * (1 / (1 + (-output_fil).exp())).log() + \
+                          (1 - gt) * ((-output_fil).exp() / (1 + (-output_fil).exp())).log())
+            loss += temp.sum()
+    loss = loss / batch_size / n_tasks_all
+    return loss
+
+
+# def SigmoidCrossEntropyLoss(x, y, w_p, w_n):
+# 	# weighted sigmoid cross entropy loss defined in Li et al. ACPR'15
+# 	loss = 0.0
+# 	if not x.size() == y.size():
+# 		print("x and y must have the same size")
+# 	else:
+# 		N = y.size(0)
+# 		L = y.size(1)
+# 		for i in range(N):
+# 			w = torch.zeros(L).cuda()
+# 			w[y[i].data == 1] = w_p[y[i].data == 1]
+# 			w[y[i].data == 0] = w_n[y[i].data == 0]
+#
+# 			w = Variable(w, requires_grad = False)
+# 			temp = - w * ( y[i] * (1 / (1 + (-x[i]).exp())).log() + \
+# 				(1 - y[i]) * ( (-x[i]).exp() / (1 + (-x[i]).exp()) ).log() )
+# 			loss += temp.sum()
+#
+# 		loss = loss / N
+# 	return loss

@@ -21,9 +21,11 @@ def log_config(args, logger=None, single=False):
             pop_list.extend(['pretrained_t', 'name_t'])
         elif args.conv == 'lsnet':
             pop_list.extend(['pretrained_s', 'name_s', 'pretrained_t', 'name_t'])
+            log_names.extend(['freeze_backbone', 'conv'])
         else:
             raise Exception('args.conv error')
         log_names.extend(['weight_decay', 'n_epochs'])
+
     for name in pop_list:
         log_names.remove(name)
     for name in log_names:

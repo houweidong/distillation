@@ -11,23 +11,35 @@ from data.transforms import ToMaskedTargetTensor, ToMaskedTargetTensorPaper, \
 
 def _get_newdata(opt, mean, std, attrs):
     root = os.path.join(opt.root_path, 'new')
-    cropping_transform = get_inference_transform_person_lr
-    train_img_transform = Compose(
-        [square_no_elastic, RandomHorizontalFlip(), RandomRotation(10, expand=True),
-         # [RandomHorizontalFlip(), RandomRotation(10, expand=True),
-         Resize((opt.person_size, opt.person_size)),
-         ToTensor(), Normalize(mean, std)])
-    # [CenterCrop(178), Resize((256, 256)), RandomCrop(224), RandomHorizontalFlip(), ToTensor(), Normalize(mean, std)])
-    val_img_transform = Compose(
-        [square_no_elastic,
-         Resize((opt.person_size, opt.person_size)),
-         ToTensor(), Normalize(mean, std)])
+    # cropping_transform = get_inference_transform_person_lr
+    if opt.logits_vac:
+        cropping_transform = Compose([get_inference_transform_person_lr, square_no_elastic])
+        train_img_transform = Compose(
+            [
+             # [RandomHorizontalFlip(), RandomRotation(10, expand=True),
+             # Resize((opt.person_size, opt.person_size)),
+             ToTensor(), Normalize(mean, std)])
+        # [CenterCrop(178), Resize((256, 256)), RandomCrop(224), RandomHorizontalFlip(), ToTensor(), Normalize(mean, std)])
+        val_img_transform = Compose(
+            [# Resize((opt.person_size, opt.person_size)),
+             ToTensor(), Normalize(mean, std)])
+    else:
+        cropping_transform = get_inference_transform_person_lr
+        train_img_transform = Compose(
+             [square_no_elastic,
+              RandomHorizontalFlip(), RandomRotation(10, expand=True),
+              Resize((opt.person_size, opt.person_size)),
+             ToTensor(), Normalize(mean, std)])
+        # [CenterCrop(178), Resize((256, 256)), RandomCrop(224), RandomHorizontalFlip(), ToTensor(), Normalize(mean, std)])
+        val_img_transform = Compose(
+            [square_no_elastic, Resize((opt.person_size, opt.person_size)),
+             ToTensor(), Normalize(mean, std)])
     target_transform = ToMaskedTargetTensor(attrs, opt.label_smooth, opt.at, opt.at_loss)
 
     train_data = NewdataAttr(attrs, root, 'train', opt.mode, opt.state, cropping_transform, img_transform=train_img_transform,
-                             target_transform=target_transform)
+                             target_transform=target_transform, logits_vac=opt.logits_vac)
     val_data = NewdataAttr(attrs, root, 'test', opt.mode, opt.state, cropping_transform,
-                           img_transform=val_img_transform, target_transform=target_transform)
+                           img_transform=val_img_transform, target_transform=target_transform, logits_vac=opt.logits_vac)
 
     return train_data, val_data
 

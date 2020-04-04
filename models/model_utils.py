@@ -109,7 +109,7 @@ def conv_1x1_bn(inp, oup):
 
 
 class Classifier(nn.Module):
-    def __init__(self, num_attr, in_features, dropout=0.1, k=10, reduction=4):
+    def __init__(self, num_attr, fc1, fc2, dropout=0.1, k=10, reduction=4):
         super(Classifier, self).__init__()
         self.num_attr = num_attr
         self.classifier = nn.ModuleList()
@@ -121,19 +121,19 @@ class Classifier(nn.Module):
         for i in range(self.num_attr):
             classifier = nn.Sequential(
                 # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
-                nn.Linear(in_features, in_features),
+                nn.Linear(fc1, fc2),
                 # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
                 h_swish(),
                 nn.Dropout(dropout),
-                nn.Linear(in_features, 1),
+                nn.Linear(fc2, 1),
                 # nn.BatchNorm1d(num_classes) if mode == 'small' else nn.Sequential(),
                 # h_swish() if mode == 'small' else nn.Sequential()
             )
             self.classifier.append(classifier)
 
     def forward(self, x):
-        x = self.avgpool(x)
-        x = x.view(x.size(0), -1)
+        # x = self.avgpool(x)
+        # x = x.view(x.size(0), -1)
         result = []
         for i in range(self.num_attr):
             y = self.classifier[i](x)

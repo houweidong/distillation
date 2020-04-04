@@ -1,6 +1,6 @@
 import torch
 from utils.get_tasks import get_tasks
-from models.mobilenetv3 import get_model
+from models.generate_model import get_model
 import argparse
 
 

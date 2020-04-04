@@ -291,6 +291,10 @@ def parse_opts():
     parser.add_argument('--freeze_backbone', action='store_true')
     parser.add_argument('--plug_in', default='se', choices=['se', 'at', 'atse'], type=str)
     parser.add_argument('--classifier', default='Classifier', choices=['Classifier', 'PrTp', 'CPrTp', 'PCPrTp'], type=str)
+    parser.add_argument('--fc1', default=256, type=int)
+    parser.add_argument('--fc2', default=256, type=int)
+    parser.add_argument('--logits_vac', action='store_true')
+
     args = parser.parse_args()
     if args.log_dir:
         args.log_dir = os.path.join(args.result_path, args.log_dir)

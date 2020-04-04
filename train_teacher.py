@@ -96,7 +96,7 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 # model, dataloader, opmiter, use ignite's evaluator
 t_net, ids, _ = get_model(args.conv, frm='official', name_s=args.name_s, name_t=args.name_t, logger=logger,
                           pretrained_t=args.pretrained_t, pretrained_s=args.pretrained_s, device=device,
-                          plug_in=args.plug_in, classifier=args.classifier, dropout=args.dropout)
+                          plug_in=args.plug_in, classifier=args.classifier, dropout=args.dropout, fc1=args.fc1, fc2=args.fc2)
 if device == 'cuda':
     t_net = torch.nn.DataParallel(t_net).cuda()
 
@@ -104,7 +104,7 @@ attr, attr_name = get_tasks(args)
 criterion_CE, metrics = get_losses_metrics(attr, args.categorical_loss)
 trainloader, testloader = get_data(args, attr, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-head_params = filter(lambda p: id(p) not in ids, t_net.parameters()) if args.conv == 'LSnet' else t_net.parameters()
+head_params = filter(lambda p: id(p) not in ids, t_net.parameters()) if args.freeze_backbone else t_net.parameters()
 optimizer = optim.SGD(head_params, lr=args.lr, nesterov=args.nesterov, momentum=args.momentum, weight_decay=args.weight_decay)
 # optimizer = optim.adam
 if args.scheduler == 'step':

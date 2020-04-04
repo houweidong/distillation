@@ -102,7 +102,7 @@ class InvertedResidual(nn.Module):
 
 class MobileNetV3(nn.Module):
     def __init__(self, cfgs, mode, num_classes=1, width_mult=1., num_attr=5, dropout=0.1, resolution=224,
-                 classifier='Classifier', k=10, reduction=4):
+                 classifier='Classifier', k=10, reduction=4, fc1=256, fc2=256):
         super(MobileNetV3, self).__init__()
         # setting of inverted residual blocks
         self.classifier = classifier
@@ -134,15 +134,15 @@ class MobileNetV3(nn.Module):
         # building last several layers
         self.conv = nn.Sequential(
             # conv_1x1_bn(input_channel, _make_divisible(exp_size * width_mult, 8)),
-            conv_1x1_bn(input_channel, 256),
+            conv_1x1_bn(input_channel, fc1),
             # SELayer(960) if mode == 'small' else nn.Sequential()
             nn.Sequential()
         )
-        # self.avgpool = nn.Sequential(
-        #     nn.AdaptiveAvgPool2d((1, 1)),
-        #     h_swish()
-        # )
-        output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 256
+        self.avgpool = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            h_swish()
+        )
+        # output_channel = _make_divisible(1280 * width_mult, 8) if width_mult > 1.0 else 256
         # self.classifier = nn.ModuleList()
         # for i in range(self.num_attr):
         #     classifier = nn.Sequential(
@@ -156,15 +156,15 @@ class MobileNetV3(nn.Module):
         #         # h_swish() if mode == 'small' else nn.Sequential()
         #     )
         #     self.classifier.append(classifier)
-        self.classifier = getattr(model_utils, self.classifier)(self.num_attr, output_channel, self.dropout, self.k, self.reduction)
+        self.classifier = getattr(model_utils, self.classifier)(self.num_attr, fc1, fc2, self.dropout, self.k, self.reduction)
         self._initialize_weights()
         # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
         x = self.features(x)
         x = self.conv(x)
-        # x = self.avgpool(x)
-        # x = x.view(x.size(0), -1)
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
         return self.classifier(x)
 
     def _initialize_weights(self):
@@ -212,11 +212,13 @@ def mobile3l(**kwargs):
     name_t = kwargs['name_t'] if 'name_t' in kwargs else None
     logger = kwargs['logger'] if 'logger' in kwargs else print
     plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
-    classifier = kwargs['classifier']
-    dropout = kwargs['dropout']
+    classifier = kwargs['classifier'] if 'classifier' in kwargs else 'Classifier'
+    dropout = kwargs['dropout'] if 'dropout' in kwargs else 0.1
     plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     plut_off_layers = set([1, 2, 3] + [7, 8, 9, 10])
     plug_on_layers = set(range(1, 16)) - plut_off_layers
+    fc1 = kwargs['fc1'] if 'fc1' in kwargs else 256
+    fc2 = kwargs['fc2'] if 'fc2' in kwargs else 256
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -238,7 +240,7 @@ def mobile3l(**kwargs):
     for ly in plug_on_layers:
         cfgs[ly-1][3] = plug_in_dict[plug_in]
     resolutions = get_resolution_for_layers(cfgs, plug_on_layers)
-    model = MobileNetV3(cfgs, mode='large', classifier=classifier, dropout=dropout)
+    model = MobileNetV3(cfgs, mode='large', classifier=classifier, dropout=dropout, fc1=fc1, fc2=fc2)
     channels, layers = get_channels_for_distill(cfgs)
     if pretrained:
         logger('\nloading model from {}'.format(name_t))
@@ -285,7 +287,7 @@ def mobile3s(**kwargs):
     name_s = kwargs['name_s'] if 'name_s' in kwargs else None
     logger = kwargs['logger'] if 'logger' in kwargs else print
     plug_in = kwargs['plug_in'] if 'plug_in' in kwargs else 'se'
-    classifier = kwargs['classifier']
+    classifier = kwargs['classifier'] if 'classifier' in kwargs else 'Classifier'
     plug_in_dict = {'se': 1, 'at': 2, 'atse': 3}
     cfgs = [
         # k, t, c, SE, NL, s

@@ -241,8 +241,8 @@ class LSnet(nn.Module):
         resnet = resnet101()
         self.RCNN_base = nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu,
                                        resnet.maxpool, resnet.layer1, resnet.layer2, resnet.layer3)
-        output_channel = 512*4
-        self.Transformer = Transfromer(256*4, output_channel)
+        output_channel = 256
+        self.Transformer = Transfromer(256*4, output_channel, num=4)
         self.Classifier = getattr(model_utils, classifier)\
             (self.num_attr, output_channel, self.dropout, self.k, self.reduction)
         self._initialize_weights()
@@ -261,6 +261,12 @@ class LSnet(nn.Module):
                 n = m.weight.size(1)
                 m.weight.data.normal_(0, 0.01)
                 m.bias.data.zero_()
+
+        def set_bn_fix(m):
+            classname = m.__class__.__name__
+            if classname.find('BatchNorm') != -1:
+                for p in m.parameters(): p.requires_grad = False
+        self.RCNN_base.apply(set_bn_fix)
 
     def forward(self, x):
         base_feature = self.RCNN_base(x)

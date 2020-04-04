@@ -4,11 +4,56 @@ from data.attributes import WiderAttributes as WdAt, Attribute, AttributeType as
 from torchvision.datasets.folder import pil_loader
 import json
 from data.image_loader import opencv_loader
+import torchvision.transforms as transforms
+from PIL import Image
+
+
+def transform_try(img, bbox_o, img_list, index, index_int):
+    # [f, s, r]
+    if index == 0:
+        img_list.append(img_list[0].transpose(Image.FLIP_LEFT_RIGHT))
+    elif index == 1:
+        length = len(img_list)
+        for i in range(length):
+            # img_list.append(img_list[i].resize((192, 192)))
+            img_list.append(transforms.RandomRotation((5, 5))(img_list[i]))
+    elif index == 2:
+        length = len(img_list)
+        for i in range(length):
+            img_list.append(img_list[i].resize((192, 192)))
+
+    # elif index == 3:
+    #     length = len(img_list)
+    #     for i in range(length - 1):
+    #         # img_list.append(img_list[i].resize((192, 192)))
+    #         img_list.append(transforms.RandomRotation((10, 10))(img_list[0]))
+    else:
+        raise Exception('error index for transform')
+
+
+def get_image_list(img):
+    """
+    indexes_list is a int list, if the value larger than 1, the counterpart transformer will happen and add generated
+    images to the img_list, the indexes order is [t, r, f, s]
+    :param img: origin img
+    :param bbox_o: origin box
+    :param indexes: indicator for needed transformer, a int list
+    :return: image_list
+    """
+    image_list_result = []
+    img = img.resize((224, 224))
+    image_list_result.append(img)
+    image_list_result.append(img.transpose(Image.FLIP_LEFT_RIGHT))
+    length = len(image_list_result)
+    for i in range(length):
+        image_list_result.append(image_list_result[i].resize((192, 192)))
+
+    return image_list_result
 
 
 class NewdataAttr(Dataset):
     def __init__(self, attributes, root, subset, mode, state, cropping_transform,
-                 img_transform=None, target_transform=None):
+                 img_transform=None, target_transform=None, logits_vac=False):
         for attr in attributes:
             assert isinstance(attr, Attribute)
         self._attrs = attributes
@@ -22,6 +67,7 @@ class NewdataAttr(Dataset):
         self.img_transform = img_transform
         self.target_transform = target_transform
         self.img_loader = opencv_loader
+        self.logits_vac = logits_vac
 
 
     def _make_dataset(self, root, subset):
@@ -98,10 +144,6 @@ class NewdataAttr(Dataset):
         # print(img)
         crop = self.cropping_transform((img, bbox))
 
-        # Transform image crop
-        if self.img_transform is not None:
-            crop = self.img_transform(crop)
-
         # Transform target
         target = sample.copy()  # Copy sample so that the original one won't be modified
         target.pop('img')
@@ -109,7 +151,20 @@ class NewdataAttr(Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return crop, target
+        if self.logits_vac:
+            image_list = get_image_list(crop)
+            # Transform image crop
+            if self.img_transform is not None:
+                result = []
+                for img in image_list:
+                    result.append(self.img_transform(img))
+                # image_list = self.img_transform(image_list)
+            return result, target
+        else:
+            # Transform image crop
+            if self.img_transform is not None:
+                crop = self.img_transform(crop)
+            return crop, target
 
     def __len__(self):
         return len(self.data)
