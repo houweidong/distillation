@@ -23,11 +23,11 @@ def get_losses_metrics(attrs, categorical_loss='cross_entropy'):
             losses.append(loss_fns[attr]['attr'])
 
         elif attr.data_type == AttributeType.MULTICLASS:
-            for i in range(attr.branch_num):
-                metrics.append(
-                    [MyAveragePrecision(activation=lambda pred: torch.sigmoid(pred)),
-                     MyAccuracy(output_transform=lambda pred: torch.sigmoid(pred))])
-                losses.append(loss_fns[attr]['attr'])
+            # for i in range(attr.branch_num):
+            metrics.append(
+                [MyAveragePrecision(output_transform=lambda pred, y: (pred, torch.round(y).long())),
+                 MyAccuracy(output_transform=lambda pred, y: (pred, torch.round(y).long()))])
+            losses.append(loss_fns[attr]['attr'])
         elif attr.data_type == AttributeType.NUMERICAL:
             # not support now
             pass

@@ -109,7 +109,7 @@ def conv_1x1_bn(inp, oup):
 
 
 class Classifier(nn.Module):
-    def __init__(self, num_attr, fc1, fc2, dropout=0.1, k=10, reduction=4):
+    def __init__(self, num_attr, fc1, fc2, dropout=0.1, k=10, reduction=4, **kwargs):
         super(Classifier, self).__init__()
         self.num_attr = num_attr
         self.classifier = nn.ModuleList()
@@ -142,6 +142,47 @@ class Classifier(nn.Module):
         if not self.training:
             result = self.sigmoid(result)
         return result
+
+
+class ClassifierNew(nn.Module):
+    def __init__(self, _, fc1, fc2, dropout=0.1, k=10, reduction=4, **kwargs):
+        super(ClassifierNew, self).__init__()
+        self.attrs = kwargs['attr'] if 'attr' in kwargs else []
+        self.classifier = nn.ModuleList()
+        self.sigmoid = nn.Sigmoid()
+        self.softmax = nn.Softmax(1)
+        self.avgpool = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            h_swish()
+        )
+        self.activation = nn.ModuleList()
+        for i, attr in enumerate(self.attrs):
+            classifier = nn.Sequential(
+                # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
+                nn.Linear(fc1, fc2),
+                # nn.BatchNorm1d(output_channel) if mode == 'small' else nn.Sequential(),
+                h_swish(),
+                nn.Dropout(dropout),
+                nn.Linear(fc2, attr.branch_num),
+                # nn.BatchNorm1d(num_classes) if mode == 'small' else nn.Sequential(),
+                # h_swish() if mode == 'small' else nn.Sequential()
+            )
+            self.classifier.append(classifier)
+            if attr.branch_num == 1:
+                self.activation.append(nn.Sigmoid())
+            else:
+                self.activation.append(nn.Softmax(1))
+
+    def forward(self, x):
+        # x = self.avgpool(x)
+        # x = x.view(x.size(0), -1)
+        result = []
+        for i in range(len(self.attrs)):
+            y = self.classifier[i](x)
+            if not self.training:
+                y = self.activation[i](y)
+            result.append(y)
+        return tuple(result)
 
 
 class PrTp(nn.Module):

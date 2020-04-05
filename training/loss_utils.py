@@ -7,7 +7,6 @@ from torch.autograd import Variable
 
 
 def exp_loss(pred, alpha=-23, beta=-18):
-
     loss = 0.0 * torch.exp(alpha * (pred + beta / float(7 * 7)))
     return loss.mean()
 
@@ -42,7 +41,7 @@ def focal_loss(pred, target_float, gamma=2, alpha=None, size_average=True):
         at = alpha.gather(0, target.data.view(-1))
         at = 1 - at
         logpt = logpt * at
-    loss1_coe = torch.cat((1-target_float, target_float), dim=1).gather(1, target)
+    loss1_coe = torch.cat((1 - target_float, target_float), dim=1).gather(1, target)
     loss1 = (-1 * (1 - pt_final) ** gamma * logpt) * loss1_coe
 
     logpt1 = torch.log(torch.cat((pt, pt_1m), dim=1)).gather(1, target)
@@ -93,8 +92,9 @@ def ohem_loss(pred, target_float, ratio=3, reverse=False):
         selected_neg_mask = torch.zeros(int(n_neg)).bool().cuda()
         selected_neg_mask.scatter_(0, index, True)  # a [n_neg] size mask
         # print(n_pos, n_neg, neg_mask.size())
-        neg_index = torch.masked_select(torch.arange(n_pos + n_neg, dtype=torch.long, device='cuda', requires_grad=False),
-                                        neg_mask)  # Mapping from [n_neg] to [n_pos+n_neg] mask
+        neg_index = torch.masked_select(
+            torch.arange(n_pos + n_neg, dtype=torch.long, device='cuda', requires_grad=False),
+            neg_mask)  # Mapping from [n_neg] to [n_pos+n_neg] mask
         neg_mask.scatter_(0, neg_index, selected_neg_mask)
         # Return average loss of all selected samples
         mask = neg_mask | pos_mask
@@ -179,7 +179,6 @@ def get_categorial_loss(attrs, loss):
 
 
 def get_categorial_weight():
-
     weight = {}
     weight[NewAttributes.yifujinshen_yesno] = [(26303) / 5303, 1064 / (5303 + 26303)]
     weight[NewAttributes.kuzijinshen_yesno] = [(13626) / 7255, 11789 / (7255 + 13626)]
@@ -191,6 +190,27 @@ def get_categorial_weight():
     return weight
 
 
+def get_weight():
+    import math
+    numbers_sample = [[1554, 28426], [2094, 6704], [2734, 14115], [3413, 21947],
+                      [2248, 27422], [4735, 24261], [4664, 22594], [1783, 7511, 11486]]
+    pos_ratio = torch.FloatTensor([0.264, 0.535, 0.175, 0.388, 0.815])
+    w_p = (1 - pos_ratio).exp().cuda()
+    w_n = pos_ratio.exp().cuda()
+    floatTensorList = []
+    for numbers in numbers_sample:
+        if len(numbers) == 2:
+            floatTensorList.append(
+                torch.tensor([math.exp(numbers[1] / sum(numbers)), math.exp(numbers[0] / sum(numbers))],
+                             dtype=torch.float, device='cuda', requires_grad=False))
+        else:
+            floatTensorList.append(torch.tensor([math.exp((1 - numbers[0] / sum(numbers)) * 3 / 4),
+                                                 math.exp((1 - numbers[1] / sum(numbers)) * 3 / 4),
+                                                 math.exp((1 - numbers[2] / sum(numbers)) * 3 / 4)],
+                                                dtype=torch.float, device='cuda', requires_grad=False))
+    return floatTensorList
+
+
 # my masked loss for multi class
 def multitask_loss(output, label, loss_fns):
     target, mask = label
@@ -199,8 +219,10 @@ def multitask_loss(output, label, loss_fns):
     for i in range(n_tasks_all):
         # Only add loss regarding this attribute if it is present in any sample of this batch
         if mask[i].any():
-            output_fil = torch.masked_select(output[:, i], mask[i].squeeze(1).bool())  # .view(-1, output[i].size(1))
-            gt = torch.masked_select(target[i].squeeze(1), mask[i].squeeze(1).bool())  # .view(-1, target[i].size(1))
+            output_fil = torch.masked_select(output[:, i],
+                                             mask[i].squeeze(1).bool())  # .view(-1, output[i].size(1))
+            gt = torch.masked_select(target[i].squeeze(1),
+                                     mask[i].squeeze(1).bool())  # .view(-1, target[i].size(1))
             loss += loss_fns[i](output_fil, gt)
     return loss
 
@@ -215,8 +237,10 @@ def multitask_loss_balance(output, label, w_p, w_n):
         if mask[i].any():
             mask_temp = mask[i].repeat((4, 1))
             target_temp = target[i].repeat((4, 1))
-            output_fil = torch.masked_select(output[:, i], mask_temp.squeeze(1).bool())  # .view(-1, output[i].size(1))
-            gt = torch.masked_select(target_temp.squeeze(1), mask_temp.squeeze(1).bool())  # .view(-1, target[i].size(1))
+            output_fil = torch.masked_select(output[:, i],
+                                             mask_temp.squeeze(1).bool())  # .view(-1, output[i].size(1))
+            gt = torch.masked_select(target_temp.squeeze(1),
+                                     mask_temp.squeeze(1).bool())  # .view(-1, target[i].size(1))
             L = gt.size(0)
             w = torch.zeros(L).cuda()
             w[gt.data == 1] = w_p[i]
@@ -228,6 +252,32 @@ def multitask_loss_balance(output, label, w_p, w_n):
     loss = loss / batch_size / n_tasks_all
     return loss
 
+
+def multitask_loss_balance_new(output, label, w_list):
+    # w_list: shape:[attr1, attr2, attr3]  attr1:[p, n] or [c1, c2, c3]
+    target, mask = label
+    n_tasks_all = len(target)
+    batch_size = target[0].size(0)
+    loss = 0
+    for i in range(n_tasks_all):
+        # Only add loss regarding this attribute if it is present in any sample of this batch
+        if mask[i].any():
+            mask_temp = mask[i].repeat((4, 1))
+            target_temp = target[i].repeat((4, 1))
+            output_fil = output[i].squeeze(1)[mask_temp.squeeze(1).bool()]
+            gt = target_temp.squeeze(1)[mask_temp.squeeze(1).bool()]
+            if i == n_tasks_all - 1:
+                # for gaofaji
+                temp = F.cross_entropy(output_fil, gt.long(), w_list[i], reduction='sum')
+            else:
+                L = gt.size(0)
+                w = torch.zeros(L, dtype=torch.float, device='cuda', requires_grad=False).cuda()
+                w[gt.data == 1] = w_list[i][0]
+                w[gt.data == 0] = w_list[i][1]
+                temp = F.binary_cross_entropy_with_logits(output_fil, gt, w, reduction='sum')
+            loss += temp
+    loss = loss / batch_size / n_tasks_all
+    return loss
 
 # def SigmoidCrossEntropyLoss(x, y, w_p, w_n):
 # 	# weighted sigmoid cross entropy loss defined in Li et al. ACPR'15

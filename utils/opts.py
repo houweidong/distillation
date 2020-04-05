@@ -1,6 +1,7 @@
 import argparse
 from data.attributes import WiderAttributes as WdAt
 from data.attributes import NewAttributes as NwAt
+from data.attributes import NewAttributes1 as NwAt1
 from data.attributes import BerkeleyAttributes as BkAt
 import pretrainedmodels
 import os
@@ -24,7 +25,7 @@ def parse_opts():
         '--dataset',
         default='Wider',
         type=str,
-        choices=['Wider', 'Berkeley', 'New'],
+        choices=['Wider', 'Berkeley', 'New', 'New1'],
         help='(Wider). Multiple datasets can be specified using comma as separator')
     # only support wider dataset now
     parser.add_argument(
@@ -164,7 +165,7 @@ def parse_opts():
         default=[],
         type=str,
         nargs='+',
-        choices=[*WdAt.names()] + [*NwAt.names()] + [*BkAt.names()],
+        choices=[*WdAt.names()] + [*NwAt.names()] + [*BkAt.names()] + [*NwAt1.names()],
         help='Currently only support Wider attr dataset')
     parser.add_argument(
         '-or',
@@ -290,7 +291,7 @@ def parse_opts():
     parser.add_argument('--size', default='s', choices=['s', 'ss'], type=str)
     parser.add_argument('--freeze_backbone', action='store_true')
     parser.add_argument('--plug_in', default='se', choices=['se', 'at', 'atse'], type=str)
-    parser.add_argument('--classifier', default='Classifier', choices=['Classifier', 'PrTp', 'CPrTp', 'PCPrTp'], type=str)
+    parser.add_argument('--classifier', default='Classifier', choices=['Classifier', 'ClassifierNew', 'PrTp', 'CPrTp', 'PCPrTp'], type=str)
     parser.add_argument('--fc1', default=256, type=int)
     parser.add_argument('--fc2', default=256, type=int)
     parser.add_argument('--logits_vac', action='store_true')

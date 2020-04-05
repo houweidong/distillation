@@ -7,6 +7,7 @@ from ignite.metrics import EpochMetric
 from functools import partial
 import warnings
 
+
 def average_precision_compute_fn(y_preds, y_targets, activation=None):
     try:
         from sklearn.metrics import average_precision_score
@@ -32,9 +33,11 @@ class MyAveragePrecision(EpochMetric):
             you want to compute the metric with respect to one of the outputs.
 
     """
+
     def __init__(self, activation=None, output_transform=lambda x: x):
         super(MyAveragePrecision, self).__init__(partial(average_precision_compute_fn, activation=activation),
-                                               output_transform=output_transform)
+                                                 output_transform=output_transform)
+
     def update(self, output):
         y_pred, y = output
         y_pred, y = self._output_transform(y_pred, y)
@@ -67,6 +70,8 @@ class MyAveragePrecision(EpochMetric):
             except Exception as e:
                 warnings.warn("Probably, there can be a problem with `compute_fn`:\n {}".format(e),
                               RuntimeWarning)
+
+
 # class EpochMetric(Metric):
 #     _predictions, _targets = None, None
 #
@@ -168,7 +173,7 @@ class MyAccuracy(Metric):
 
 
 class MultiAttributeMetric(Metric):
-    def __init__(self, metrics_per_attr, tasks):
+    def __init__(self, metrics_per_attr, tasks, **kwargs):
         self.names = tasks
         self.metrics_per_attr = [ma if isinstance(ma, list) else [ma] for ma in metrics_per_attr]
         super().__init__()
@@ -185,8 +190,9 @@ class MultiAttributeMetric(Metric):
         preds, (target, mask) = output
         for i in range(len(self.names)):
             if mask[i].any():
-                pred = torch.masked_select(preds[:, i], mask[i].squeeze(1).bool())# .view(-1, preds[i].size(1))
-                gt = torch.masked_select(target[i].squeeze(1), mask[i].squeeze(1).bool())# .view(-1, target[i].size(1))
+                pred = torch.masked_select(preds[:, i], mask[i].squeeze(1).bool())  # .view(-1, preds[i].size(1))
+                gt = torch.masked_select(target[i].squeeze(1),
+                                         mask[i].squeeze(1).bool())  # .view(-1, target[i].size(1))
                 # pred, gt = select_samples_by_mask(preds[i], target[i], mask[i], index)
                 for m in self.metrics_per_attr[i]:
                     m.update((pred, gt))
@@ -216,6 +222,59 @@ class MultiAttributeMetric(Metric):
         else:
             return metric.__class__.__name__.lower()
 
+
+class MultiAttributeMetricNew(Metric):
+    def __init__(self, metrics_per_attr, tasks, **kwargs):
+        self.attrs = kwargs['attr'] if 'attr' in kwargs else []
+        self.names = tasks
+        self.metrics_per_attr = [ma if isinstance(ma, list) else [ma] for ma in metrics_per_attr]
+        super().__init__()
+
+    def reset(self):
+        for ma in self.metrics_per_attr:
+            for m in ma:
+                m.reset()
+
+    def update(self, output):
+        # self.names jinshen_yesno, jinshen_recog,        kuzijinshen_yesno, kuzijinshen_recog
+        # preds:     attr1 logits,  attr1_recog logits,   attr2 logits,      attr2_recog logits,  attr1_at, attr2_at
+        # so match the front 4 items of preds use lenght of self.names, and discard the last two at predits
+        preds, (target, mask) = output
+        for i, attr in enumerate(self.attrs):
+            if mask[i].any():
+                pred = preds[i].squeeze(1)[mask[i].squeeze(1).bool()]
+                gt = target[i].squeeze(1)[mask[i].squeeze(1).bool()]
+                batch_size = gt.size(0)
+                for m in self.metrics_per_attr[i]:
+                    if attr.branch_num != 1 and m.__class__.__name__ == 'MyAveragePrecision':
+                        gt = torch.zeros(batch_size, attr.branch_num, device='cuda', requires_grad=False).scatter_(
+                            1, gt.unsqueeze(1).long(), 1)
+                    m.update((pred, gt))
+
+    def compute(self):
+        # logger_print = create_orderdict_for_print()
+        table = TableForPrint()
+
+        # for each Attribute:
+        for name, ma in zip(self.names, self.metrics_per_attr):
+            table.reset(name)
+            # Set metric display name
+            for m in ma:
+                m_name = self.print_metric_name(m)
+                table.update(name, m_name, m.compute())
+        table.summarize()
+        return {'metrics': table.metrics, 'summaries': table.summary, 'logger': table.logger_print}
+
+    @staticmethod
+    def print_metric_name(metric):
+        if isinstance(metric, MyAveragePrecision):
+            return 'ap'
+        elif isinstance(metric, MyAccuracy):
+            return 'accuracy'
+        elif isinstance(metric, Loss):
+            return 'loss'
+        else:
+            return metric.__class__.__name__.lower()
 
 # Utility Metric to return a scaled output of the actual metric
 # class ScaledError(Metric):

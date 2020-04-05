@@ -102,6 +102,62 @@ class ErisedAttributes(Enum):
         return [a.name.lower() for a in ErisedAttributes]
 
 
+class NewAttributes1(Enum):
+    # 是否紧身(衣服) + 衣服种类 + 是否高跟 + 鞋子种类 + 是否紧身(裤子) + 裤子种类 + 是否有帽子 +
+    # 是否有围巾 + 头发是否遮挡脖子 + 高领是否遮挡脖子 + 是否高发髻 + 是否大肚腩
+    yifujinshen_yesno = 0
+    yifu_zhonglei = 1
+    gaogen_yesno = 2
+    xiezi_zhonglei = 3
+    kuzijinshen_yesno = 4
+    kuzi_zhonglei = 5
+    maozi_yesno = 6
+    weijin_yesno = 7
+    toufadangbozi_yesno = 8
+    gaolingdangbozi_yesno = 9
+    gaofaji_zhonglei = 10
+    daduzi_yesno = 11
+
+    def __str__(self):
+        return self.name.lower()
+
+    @staticmethod
+    def num_of_class(at):
+        if at == 'yifu_zhonglei':
+            return 23
+            # return 10
+        elif at == 'xiezi_zhonglei':
+            return 29
+            # return 4
+        elif at == 'kuzi_zhonglei':
+            return 12
+            # return 10
+        elif at == 'gaofaji_zhonglei':
+            return 3
+        else:
+            return 1
+
+    @staticmethod
+    def names():
+        return [a.name.lower() for a in NewAttributes1]
+
+    @staticmethod
+    def list_attributes(opt):
+        out_rec = opt.specified_recognizable_attrs
+
+        def fuc(ar):
+            if str(ar) in out_rec:
+                return Attribute(ar, AttributeType.BINARY if str(ar).endswith('yesno') else AttributeType.MULTICLASS,
+                                 NewAttributes1.num_of_class(str(ar)), [], rec_trainable=True)
+            else:
+                return Attribute(ar, AttributeType.BINARY if str(ar).endswith('yesno') else AttributeType.MULTICLASS,
+                                 NewAttributes1.num_of_class(str(ar)), [], rec_trainable=False)
+
+        attrs_spc = filter(lambda x: str(x) in opt.specified_attrs,
+                           [attr for attr in NewAttributes1])
+        return list(map(fuc, attrs_spc))
+
+
 class NewAttributes(Enum):
     # 是否紧身(衣服) + 衣服种类 + 是否高跟 + 鞋子种类 + 是否紧身(裤子) + 裤子种类 + 是否有帽子 +
     # 是否有围巾 + 头发是否遮挡脖子 + 高领是否遮挡脖子 + 是否高发髻 + 是否大肚腩

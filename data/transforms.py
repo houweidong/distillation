@@ -106,47 +106,25 @@ class ToMaskedTargetTensor(object):
         for i, attr in enumerate(self.attrs):
             # if attr.key in sample:
             recognizability = self.pos if sample['recognizability'][attr.key] == 1 else self.neg
-            if attr.branch_num == 1:
-                # Class label is valid(available) only when the attribute of this sample is recognizable
-                if recognizability == self.pos:
-                    cls_available = 1
+
+            # Class label is valid(available) only when the attribute of this sample is recognizable
+            if recognizability == self.pos:
+                cls_available = 1
+                if attr.branch_num == 1:
                     val = self.pos if sample[attr.key] == 1 else self.neg
                 else:
-                    cls_available = 0
-                    val = dummy_val
-                rec_available = 1  # Recognizability is available as long as the sample contains the attribute
-                # Use a mask tensor to indicate which attribute is available on each sample
-                mask.append(torch.tensor([cls_available], dtype=torch.uint8, requires_grad=False))
-                target.append(torch.tensor([val], dtype=torch.float, requires_grad=False))
-                if self.at:
-                    mask_at.append(torch.tensor([cls_available], dtype=torch.uint8, requires_grad=False))
-                    at_ar = attr.at if self.at_loss == 'MSE' else softmax(attr.at)
-                    target_at.append(torch.tensor(at_ar, dtype=torch.float, requires_grad=False))
-
+                    val = sample[attr.key]
             else:
-                # TODO
-                # for j in range(attr.branch_num):
-                #     # Class label is valid(available) only when the attribute of this sample is recognizable
-                #     cls_available = 1
-                #     if recognizability == self.pos:
-                #         if j == sample[attr.key]:
-                #             val = 1
-                #         else:
-                #             val = 0
-                #     else:
-                #         cls_available = 0
-                #         val = dummy_val
-                #     rec_available = 1  # Recognizability is available as long as the sample contains the attribute
-                #     # Use a mask tensor to indicate which attribute is available on each sample
-                #     mask.append(torch.tensor([cls_available], dtype=torch.uint8, requires_grad=False))
-                #     target.append(torch.tensor([val], dtype=torch.float, requires_grad=False))
-                pass
-            # else:
-            #     cls_available = 0
-            #     val = dummy_val
-            #     rec_available = 0
-            #     if attr.rec_trainable:
-            #         recognizability = dummy_val
+                cls_available = 0
+                val = dummy_val
+            rec_available = 1  # Recognizability is available as long as the sample contains the attribute
+            # Use a mask tensor to indicate which attribute is available on each sample
+            mask.append(torch.tensor([cls_available], dtype=torch.uint8, requires_grad=False))
+            target.append(torch.tensor([val], dtype=torch.float, requires_grad=False))
+            if self.at:
+                mask_at.append(torch.tensor([cls_available], dtype=torch.uint8, requires_grad=False))
+                at_ar = attr.at if self.at_loss == 'MSE' else softmax(attr.at)
+                target_at.append(torch.tensor(at_ar, dtype=torch.float, requires_grad=False))
 
             if attr.rec_trainable:
                 # When one attribute's recognizability is trainable, we always return a tuple,

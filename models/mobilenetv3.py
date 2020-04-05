@@ -102,7 +102,7 @@ class InvertedResidual(nn.Module):
 
 class MobileNetV3(nn.Module):
     def __init__(self, cfgs, mode, num_classes=1, width_mult=1., num_attr=5, dropout=0.1, resolution=224,
-                 classifier='Classifier', k=10, reduction=4, fc1=256, fc2=256):
+                 classifier='Classifier', k=10, reduction=4, fc1=256, fc2=256, attr=[]):
         super(MobileNetV3, self).__init__()
         # setting of inverted residual blocks
         self.classifier = classifier
@@ -112,6 +112,7 @@ class MobileNetV3(nn.Module):
         self.dropout = dropout
         self.k = k
         self.reduction = reduction
+        self.attr = attr
         assert mode in ['large', 'small']
 
         # building first layer
@@ -156,7 +157,8 @@ class MobileNetV3(nn.Module):
         #         # h_swish() if mode == 'small' else nn.Sequential()
         #     )
         #     self.classifier.append(classifier)
-        self.classifier = getattr(model_utils, self.classifier)(self.num_attr, fc1, fc2, self.dropout, self.k, self.reduction)
+        self.classifier = getattr(model_utils, self.classifier)(self.num_attr, fc1, fc2, self.dropout, self.k,
+                                                                self.reduction, attr=self.attr)
         self._initialize_weights()
         # self.sigmoid = nn.Sigmoid()
 
@@ -219,6 +221,7 @@ def mobile3l(**kwargs):
     plug_on_layers = set(range(1, 16)) - plut_off_layers
     fc1 = kwargs['fc1'] if 'fc1' in kwargs else 256
     fc2 = kwargs['fc2'] if 'fc2' in kwargs else 256
+    attr = kwargs['attr'] if 'attr' in kwargs else []
     cfgs = [
         # k, t, c, SE, NL, s
         [3,  16,  16, 0, 0, 1],  # 1
@@ -240,7 +243,7 @@ def mobile3l(**kwargs):
     for ly in plug_on_layers:
         cfgs[ly-1][3] = plug_in_dict[plug_in]
     resolutions = get_resolution_for_layers(cfgs, plug_on_layers)
-    model = MobileNetV3(cfgs, mode='large', classifier=classifier, dropout=dropout, fc1=fc1, fc2=fc2)
+    model = MobileNetV3(cfgs, mode='large', classifier=classifier, dropout=dropout, fc1=fc1, fc2=fc2, attr=attr)
     channels, layers = get_channels_for_distill(cfgs)
     if pretrained:
         logger('\nloading model from {}'.format(name_t))

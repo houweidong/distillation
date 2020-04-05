@@ -68,7 +68,11 @@ from sklearn.metrics import average_precision_score
 # plt.show()
 
 
-y_true = np.array([0, 0, 1, 1])
-y_scores = np.array([500, 100, 1000, 1000])
-re = average_precision_score(y_true, y_scores)  # doctest: +ELLIPSIS
-print(re)
+import torch
+preds = torch.rand((5, 3))
+print(preds)
+print([preds.squeeze(1)])
+mask = torch.randint(0, 2, (5, 3)).bool()
+print(mask)
+pred = preds[mask]
+print(pred)

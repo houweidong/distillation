@@ -1,6 +1,7 @@
 from data.attributes import WiderAttributes as WdAt
 from data.attributes import BerkeleyAttributes as BkAt
 from data.attributes import NewAttributes as NwAt
+from data.attributes import NewAttributes1 as NwAt1
 from data.attributes import Attribute
 from collections import OrderedDict
 
@@ -20,6 +21,8 @@ def get_tasks(opt):
             attrs_ds = BkAt.list_attributes(opt)
         elif ds == 'New':
             attrs_ds = NwAt.list_attributes(opt)
+        elif ds == 'New1':
+            attrs_ds = NwAt1.list_attributes(opt)
         else:
             raise Exception("Not supported dataset {}".format(ds))
 
@@ -34,11 +37,12 @@ def get_tasks(opt):
     names = []
     for attr in attributes:
         assert isinstance(attr, Attribute)
-        if attr.branch_num == 1:
-            names.append(attr.name)
-        else:
-            for i in range(attr.branch_num):
-                names.append(attr.name + str(i))
+        # if attr.branch_num == 1:
+        #     names.append(attr.name)
+        # else:
+        #     for i in range(attr.branch_num):
+        #         names.append(attr.name + str(i))
+        names.append(attr.name)
         if attr.rec_trainable:
             names.append(attr.name + '/recognizable')
 
