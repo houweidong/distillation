@@ -64,12 +64,12 @@ class MyAveragePrecision(EpochMetric):
         self._targets = torch.cat([self._targets, y], dim=0)
 
         # Check once the signature and execution of compute_fn
-        if self._predictions.shape == y_pred.shape:
-            try:
-                self.compute_fn(self._predictions, self._targets)
-            except Exception as e:
-                warnings.warn("Probably, there can be a problem with `compute_fn`:\n {}".format(e),
-                              RuntimeWarning)
+        # if self._predictions.shape == y_pred.shape:
+        #     try:
+        #         self.compute_fn(self._predictions, self._targets)
+        #     except Exception as e:
+        #         warnings.warn("Probably, there can be a problem with `compute_fn`:\n {}".format(e),
+        #                       RuntimeWarning)
 
 
 # class EpochMetric(Metric):

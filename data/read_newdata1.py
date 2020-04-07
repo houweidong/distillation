@@ -36,7 +36,7 @@ class NewdataAttr1(Dataset):
 
         with open(anno_path) as f:
             lines = f.readlines()
-            lines = lines[:32] if self.state else lines
+            lines = lines[:1000] if self.state else lines
             for line in lines:
                 line_list = line.split()
                 if line_list:  # may have []
@@ -47,7 +47,7 @@ class NewdataAttr1(Dataset):
                         box = list(map(lambda x: float(x), line_list[i+12:i+16]))
                         # there have 9 pictures' boxes have problems, so need to filter them
                         if box[2] < box[0] or box[3] < box[1]:
-                            print(box)
+                            print(img_name, box)
                             continue
                         sample = dict(img=img_path, bbox=box)
                         recognizability = dict()

@@ -194,9 +194,9 @@ def get_weight():
     import math
     numbers_sample = [[1554, 28426], [2094, 6704], [2734, 14115], [3413, 21947],
                       [2248, 27422], [4735, 24261], [4664, 22594], [1783, 7511, 11486]]
-    pos_ratio = torch.FloatTensor([0.264, 0.535, 0.175, 0.388, 0.815])
-    w_p = (1 - pos_ratio).exp().cuda()
-    w_n = pos_ratio.exp().cuda()
+    # pos_ratio = torch.FloatTensor([0.264, 0.535, 0.175, 0.388, 0.815])
+    # w_p = (1 - pos_ratio).exp().cuda()
+    # w_n = pos_ratio.exp().cuda()
     floatTensorList = []
     for numbers in numbers_sample:
         if len(numbers) == 2:
