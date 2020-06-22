@@ -23,7 +23,7 @@ def parse_opts():
         help='Result directory path')
     parser.add_argument(
         '--dataset',
-        default='Wider',
+        default='New1',
         type=str,
         choices=['Wider', 'Berkeley', 'New', 'New1'],
         help='(Wider). Multiple datasets can be specified using comma as separator')
@@ -256,7 +256,7 @@ def parse_opts():
         choices=['wide', 'thin'])
     parser.add_argument(
         '--img_path',
-        default='',
+        default='/root/dataset/6.jpg',
         type=str,
         help='test img path')
     parser.add_argument(
@@ -269,8 +269,12 @@ def parse_opts():
         '--test_mode',
         default='pic',
         type=str,
-        choices=['pic', 'train_dir', 'camera'],
+        choices=['pic', 'train_dir', 'camera', 'vedio'],
         help='pic: a single picture,  train_dir: the train set and val set,  camera: for the real time test')
+    parser.add_argument(
+        '--vedio_path',
+        default='/root/dataset/test.mp4',
+        type=str)
     parser.add_argument('--AB_loss_multiplier', default=30, type=float, help='multiplier to loss')
     parser.add_argument('--DTL_loss_multiplier', default=100, type=float, help='multiplier to loss')
     parser.add_argument('--DTL', action='store_true', help='DTL (Distillation in Transfer Learning) method')
@@ -291,7 +295,7 @@ def parse_opts():
     parser.add_argument('--size', default='s', choices=['s', 'ss'], type=str)
     parser.add_argument('--freeze_backbone', action='store_true')
     parser.add_argument('--plug_in', default='se', choices=['se', 'at', 'atse'], type=str)
-    parser.add_argument('--classifier', default='Classifier', choices=['Classifier', 'ClassifierNew', 'PrTp', 'CPrTp', 'PCPrTp'], type=str)
+    parser.add_argument('--classifier', default='ClassifierNew', choices=['Classifier', 'ClassifierNew', 'PrTp', 'CPrTp', 'PCPrTp'], type=str)
     parser.add_argument('--fc1', default=256, type=int)
     parser.add_argument('--fc2', default=256, type=int)
     parser.add_argument('--logits_vac', action='store_true')

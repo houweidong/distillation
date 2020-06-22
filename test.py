@@ -69,10 +69,9 @@ from sklearn.metrics import average_precision_score
 
 
 import torch
-preds = torch.rand((5, 3))
-print(preds)
-print([preds.squeeze(1)])
-mask = torch.randint(0, 2, (5, 3)).bool()
-print(mask)
-pred = preds[mask]
-print(pred)
+
+import cv2
+
+a = cv2.imread('/root/dataset/6.jpg')
+cv2.imshow('a', a)
+cv2.waitKey(100)
