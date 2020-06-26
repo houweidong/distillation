@@ -156,6 +156,7 @@ class ClassifierNew(nn.Module):
             h_swish()
         )
         self.activation = nn.ModuleList()
+        # self.activation1 = nn.Sigmoid()
         for i, attr in enumerate(self.attrs):
             classifier = nn.Sequential(
                 # nn.Linear(_make_divisible(exp_size * width_mult, 8), output_channel),
@@ -181,6 +182,7 @@ class ClassifierNew(nn.Module):
             y = self.classifier[i](x)
             if not self.training:
                 y = self.activation[i](y)
+                # y = self.activation1(y)
             result.append(y)
         return tuple(result)
 

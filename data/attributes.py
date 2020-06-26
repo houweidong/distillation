@@ -122,7 +122,7 @@ class NewAttributes1(Enum):
         return self.name.lower()
 
     @staticmethod
-    def num_of_class(at):
+    def num_of_class(at, all_two=False):
         if at == 'yifu_zhonglei':
             return 23
             # return 10
@@ -133,7 +133,7 @@ class NewAttributes1(Enum):
             return 12
             # return 10
         elif at == 'gaofaji_zhonglei':
-            return 3
+            return 1 if all_two else 3
         else:
             return 1
 
@@ -146,12 +146,13 @@ class NewAttributes1(Enum):
         out_rec = opt.specified_recognizable_attrs
 
         def fuc(ar):
+            num_branch = NewAttributes1.num_of_class(str(ar), opt.all_two)
             if str(ar) in out_rec:
-                return Attribute(ar, AttributeType.BINARY if str(ar).endswith('yesno') else AttributeType.MULTICLASS,
-                                 NewAttributes1.num_of_class(str(ar)), [], rec_trainable=True)
+                return Attribute(ar, AttributeType.BINARY if num_branch == 1 else AttributeType.MULTICLASS,
+                                 num_branch, [], rec_trainable=True)
             else:
-                return Attribute(ar, AttributeType.BINARY if str(ar).endswith('yesno') else AttributeType.MULTICLASS,
-                                 NewAttributes1.num_of_class(str(ar)), [], rec_trainable=False)
+                return Attribute(ar, AttributeType.BINARY if num_branch == 1 else AttributeType.MULTICLASS,
+                                 num_branch, [], rec_trainable=False)
 
         attrs_spc = filter(lambda x: str(x) in opt.specified_attrs,
                            [attr for attr in NewAttributes1])

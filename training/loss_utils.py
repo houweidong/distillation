@@ -190,10 +190,12 @@ def get_categorial_weight():
     return weight
 
 
-def get_weight():
+def get_weight(all_two=False):
     import math
     numbers_sample = [[1554, 28426], [2094, 6704], [2734, 14115], [3413, 21947],
                       [2248, 27422], [4735, 24261], [4664, 22594], [1783, 7511, 11486]]
+    if all_two:
+        numbers_sample[-1] = [sum(numbers_sample[-1][:2]), numbers_sample[-1][2]]
     # pos_ratio = torch.FloatTensor([0.264, 0.535, 0.175, 0.388, 0.815])
     # w_p = (1 - pos_ratio).exp().cuda()
     # w_n = pos_ratio.exp().cuda()
@@ -253,7 +255,7 @@ def multitask_loss_balance(output, label, w_p, w_n):
     return loss
 
 
-def multitask_loss_balance_new(output, label, w_list):
+def multitask_loss_balance_new(output, label, w_list, all_two=False):
     # w_list: shape:[attr1, attr2, attr3]  attr1:[p, n] or [c1, c2, c3]
     target, mask = label
     n_tasks_all = len(target)
@@ -266,7 +268,7 @@ def multitask_loss_balance_new(output, label, w_list):
             target_temp = target[i].repeat((4, 1))
             output_fil = output[i].squeeze(1)[mask_temp.squeeze(1).bool()]
             gt = target_temp.squeeze(1)[mask_temp.squeeze(1).bool()]
-            if i == n_tasks_all - 1:
+            if not all_two and i == n_tasks_all - 1:
                 # for gaofaji
                 temp = F.cross_entropy(output_fil, gt.long(), w_list[i], reduction='sum')
             else:

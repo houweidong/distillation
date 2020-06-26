@@ -5,15 +5,17 @@ from torchvision.datasets.folder import pil_loader
 import json
 from data.image_loader import opencv_loader
 from data.read_newdata import transform_try, get_image_list
+from data.attributes import NewAttributes1
 
 
 class NewdataAttr1(Dataset):
     def __init__(self, attributes, root, subset, mode, state, cropping_transform,
-                 img_transform=None, target_transform=None, logits_vac=False):
+                 img_transform=None, target_transform=None, logits_vac=False, all_two=False):
         for attr in attributes:
             assert isinstance(attr, Attribute)
         self._attrs = attributes
         self._attrs_values = [attr.key.value for attr in self._attrs]
+        self.all_two = all_two
         # mode is in ["paper", "branch"]
         self.mode = mode
         self.state = state
@@ -59,7 +61,10 @@ class NewdataAttr1(Dataset):
                                 sample[attr.key] = -10
                             else:
                                 recognizability[attr.key] = 1
-                                sample[attr.key] = int(l)
+                                if self.all_two and attr == NewAttributes1.gaofaji_zhonglei:
+                                    sample[attr.key] = 0 if int(l) <= 1 else 1
+                                else:
+                                    sample[attr.key] = int(l)
                         sample['recognizability'] = recognizability
                         data.append(sample)
         return data

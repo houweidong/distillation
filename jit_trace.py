@@ -11,13 +11,15 @@ def jit_trace(args, model_path):
     model.cpu()
     example = torch.rand(1, 3, 224, 224)
     a = torch.jit.trace(model.eval(), example)
-    a.save('{}.pt'.format(args.conv))
+    # a.save('{}.pt'.format(args.conv))
+    a.save('{}.pt'.format('ap22'))
     print('transform succeed')
 
 
 if __name__ == '__main__':
 
     arg = parse_opts()
-    model_path = '/root/.torch/models/modelofnewdata'
+    # model_path = '/root/.torch/models/modelofnewdata'
+    model_path = '/root/models/distillation/log/teacher/ap0.2291'
     jit_trace(arg, model_path)
 

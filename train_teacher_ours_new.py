@@ -29,7 +29,7 @@ from utils.log_config import log_config
 from training.loss_utils import get_weight
 
 # Training
-def train(net, epoch, criterion, w_list):
+def train(net, epoch, criterion, w_list, all_two=False):
     # epoch_start_time = time.time()
     logger('\nClassification training Epoch: %d' % epoch)
     net.train()
@@ -49,7 +49,7 @@ def train(net, epoch, criterion, w_list):
         outputs = []
         for output_l, output_s in zip(outputs_l, outputs_s):
             outputs.append(torch.cat((output_l, output_s)))
-        loss = criterion(outputs, targets, w_list)
+        loss = criterion(outputs, targets, w_list, all_two)
         output_list = []
         for op in outputs:
             output_list.append(op.split(batch_size))
@@ -153,10 +153,10 @@ val_evaluator = my_evaluator(t_net, metrics={
     'multitask': MultiAttributeMetricNew(metrics, attr_name, attr=attr)}, device=device)
 Saver = Saver()
 
-w_list = get_weight()
+w_list = get_weight(all_two=args.all_two)
 criterion = multitask_loss_balance_new
 
 for epoch in range(1, args.n_epochs+1):
-    train(t_net, epoch, criterion, w_list)
+    train(t_net, epoch, criterion, w_list, args.all_two)
     metric_info = test(t_net, epoch)
     Saver.save(epoch, metric_info)

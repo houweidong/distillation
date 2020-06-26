@@ -70,8 +70,6 @@ from sklearn.metrics import average_precision_score
 
 import torch
 
-import cv2
-
-a = cv2.imread('/root/dataset/6.jpg')
-cv2.imshow('a', a)
-cv2.waitKey(100)
+model_path = '/root/dataset/dpan/mobile3l.pt'
+state_dict = torch.load(model_path, map_location='cpu')
+print('wo')

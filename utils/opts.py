@@ -299,6 +299,7 @@ def parse_opts():
     parser.add_argument('--fc1', default=256, type=int)
     parser.add_argument('--fc2', default=256, type=int)
     parser.add_argument('--logits_vac', action='store_true')
+    parser.add_argument('--all_two', action='store_true')
 
     args = parser.parse_args()
     if args.log_dir:
